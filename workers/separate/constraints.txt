@@ -1,0 +1,4 @@
+# torch nesmí přepsat žádná tranzitivní závislost (openunmix, dora-search):
+# jen cu130 aarch64 build má kernely pro sm_121 (stejně jako AiStack audio).
+torch==2.10.0+cu130
+torchaudio==2.10.0+cu130

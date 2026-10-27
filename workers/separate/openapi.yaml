@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: dabing worker separate
+  version: 0.1.0
+  description: |
+    Demucs separace hlasu od pozadí. Stateless: dostane cesty na sdíleném úložišti
+    (/mnt/dabing), vrátí cesty výstupů. Fallback bez NFS: vstup se nahraje přes
+    POST /v1/files, výstupy se stáhnou přes GET /v1/files.
+paths:
+  /healthz:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /v1/separate:
+    post:
+      operationId: separate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparateRequest" }
+      responses:
+        "200":
+          description: Hotovo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeparateResult" }
+        default:
+          description: Chyba
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/files:
+    post:
+      operationId: uploadFile
+      description: Fallback bez NFS — nahraje vstup do scratch adresáře workeru.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Uloženo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileRef" }
+        default:
+          description: Chyba
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      operationId: downloadFile
+      description: Fallback bez NFS — stáhne výstup ze scratch adresáře workeru.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Obsah souboru
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        default:
+          description: Chyba
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status, backend, model, device, loaded]
+      properties:
+        status: { type: string }
+        backend: { type: string, description: "demucs | passthrough" }
+        model: { type: string }
+        device: { type: string }
+        loaded: { type: boolean }
+        torch: { type: string }
+    SeparateRequest:
+      type: object
+      required: [input_path, output_dir]
+      properties:
+        input_path: { type: string, description: "WAV/FLAC na sdíleném úložišti" }
+        output_dir: { type: string, description: "Adresář pro výstupy (vytvoří se)" }
+        model: { type: string, description: "Výchozí htdemucs_ft" }
+        shifts: { type: integer, minimum: 0, maximum: 10, description: "Demucs shifts, výchozí 1" }
+        keep_stems: { type: boolean, description: "Uložit i drums/bass/other (detekce písniček)" }
+    SeparateResult:
+      type: object
+      required: [vocals_path, background_path, sample_rate, duration_s, model, device, elapsed_s, vocals_rms, background_rms]
+      properties:
+        vocals_path: { type: string }
+        background_path: { type: string }
+        stems:
+          type: object
+          additionalProperties: { type: string }
+        sample_rate: { type: integer }
+        duration_s: { type: number, format: double }
+        model: { type: string }
+        device: { type: string }
+        elapsed_s: { type: number, format: double }
+        vocals_rms: { type: number, format: double }
+        background_rms: { type: number, format: double }
+    FileRef:
+      type: object
+      required: [path, dir, size]
+      properties:
+        path: { type: string, description: "Cesta souboru u workeru" }
+        dir: { type: string, description: "Scratch adresář úlohy u workeru (pro output_dir)" }
+        size: { type: integer, format: int64 }
+    Error:
+      type: object
+      properties:
+        detail: {}
