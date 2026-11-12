@@ -1,16 +1,16 @@
-"""Worker separate — Demucs separace hlasu od pozadí.
+"""Worker separate — Demucs vocal/background separation.
 
-Stateless obal modelu: POST /v1/separate dostane cesty na sdíleném úložišti
-(/mnt/dabing), zapíše vocals.wav + background.wav a vrátí cesty. Žádná logika
-pipeline — ta je v Go orchestrátoru. Smlouva: ../openapi.yaml.
+Stateless model wrapper: POST /v1/separate takes paths on the shared storage,
+writes vocals.wav + background.wav and returns their paths. No pipeline logic —
+that lives in the Go orchestrator. Contract: ../openapi.yaml.
 
-Prostředí:
-  SEPARATE_BACKEND   demucs | passthrough (passthrough = bez modelu, pro testy)
-  SEPARATE_MODEL     výchozí model, htdemucs_ft
-  SEPARATE_ROOTS     povolené kořeny cest oddělené ":" (výchozí /mnt/dabing:$SEPARATE_SCRATCH)
-  SEPARATE_SCRATCH   scratch pro upload fallback (výchozí /scratch)
-  SEPARATE_SCRATCH_TTL_H  po kolika hodinách se scratch úlohy maže (24)
-  SEPARATE_IDLE_UNLOAD_S  uvolnit model z GPU po nečinnosti (600, 0 = nikdy)
+Environment:
+  SEPARATE_BACKEND   demucs | passthrough (passthrough = no model, for tests)
+  SEPARATE_MODEL     default model, htdemucs_ft
+  SEPARATE_ROOTS     allowed path roots separated by ":" (default /mnt/dabing:$SEPARATE_SCRATCH)
+  SEPARATE_SCRATCH   scratch for the upload fallback (default /scratch)
+  SEPARATE_SCRATCH_TTL_H  hours after which scratch jobs are deleted (24)
+  SEPARATE_IDLE_UNLOAD_S  release the model from the GPU after idling (600, 0 = never)
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ class Health(BaseModel):
 
 
 class Passthrough:
-    """Bez modelu: vocals = vstup, pozadí = ticho. Jen pro testy pipeline."""
+    """No model: vocals = input, background = silence. For pipeline tests only."""
 
     device = "cpu"
     torch_version = None
@@ -120,7 +120,7 @@ class Demucs:
             log.info("načítám %s na %s", name, self.device)
             m = get_model(name)
             m.eval()
-            self.models = {name: m}  # jen jeden model v paměti
+            self.models = {name: m}  # keep a single model in memory
         return self.models[name]
 
     def unload_if_idle(self) -> None:
@@ -136,7 +136,7 @@ class Demucs:
 
         torch = self.torch
         m = self._model(model)
-        x = torch.from_numpy(audio.T.copy())  # (kanály, vzorky)
+        x = torch.from_numpy(audio.T.copy())  # (channels, samples)
         if x.shape[0] == 1:
             x = x.repeat(2, 1)
         elif x.shape[0] > 2:
@@ -212,7 +212,7 @@ app = FastAPI(title="dabing worker separate", version="0.1.0")
 
 @app.exception_handler(Exception)
 def _unhandled(_, e: Exception) -> JSONResponse:
-    # Chyba musí dojít orchestrátoru čitelně (jobs.error), ne jako holé 500.
+    # The orchestrator must get a readable error (jobs.error), not a bare 500.
     log.exception("neošetřená chyba")
     return JSONResponse(status_code=500, content={"detail": f"{type(e).__name__}: {e}"})
 
@@ -237,14 +237,14 @@ def separate(req: SeparateRequest) -> SeparateResult:
 
     t0 = time.monotonic()
     try:
-        audio, sr = sf.read(src, dtype="float32", always_2d=True)  # (vzorky, kanály)
+        audio, sr = sf.read(src, dtype="float32", always_2d=True)  # (samples, channels)
     except sf.LibsndfileError as e:
         raise HTTPException(400, f"nečitelné audio {src}: {e}") from e
     log.info("separuji %s (%.1f s, %d Hz) modelem %s", src, len(audio) / sr, sr, model)
     with gpu_lock:
         try:
             stems = backend.separate(audio, sr, model, shifts)
-        except Exception as e:  # noqa: BLE001 — chybu vrátit orchestrátoru
+        except Exception as e:  # noqa: BLE001 — report to the orchestrator
             log.exception("separace selhala")
             raise HTTPException(500, f"{type(e).__name__}: {e}") from e
 

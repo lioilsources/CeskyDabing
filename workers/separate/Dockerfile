@@ -1,14 +1,14 @@
 # =============================================================================
-# dabing worker separate — Demucs htdemucs_ft na GB10 (sm_121, aarch64)
+# dabing worker separate — Demucs htdemucs_ft on GB10 (sm_121, aarch64)
 # =============================================================================
 #
-# Základ převzatý z AiStack services/audio/runtime (ověřené na SPARKu):
-# CUDA 13 runtime + torch 2.10 cu130 z pip — jediný build s kernely pro sm_121.
-# nvcr.io/nvidia/pytorch (DABING_PLAN §3) by šel také, ale tahle cesta je na
-# SPARKu už vyzkoušená a image je o ~15 GB menší.
+# Same base as the AiStack audio runtime images, already proven on SPARK:
+# CUDA 13 runtime + torch 2.10 cu130 from pip, the only build with sm_121
+# kernels. nvcr.io/nvidia/pytorch (00-DABING_PLAN §3) would work too, but this
+# path is tested there and the image is ~15 GB smaller.
 #
-# Build (na SPARKu, z kořene repa):
-#   docker build -f workers/separate/Dockerfile -t dabing/separate:latest workers/separate
+# Built by a spark-broker job from the repo root (see docs/spark.md):
+#   docker build -t dabing/separate:latest workers/separate
 #
 # =============================================================================
 
@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cu130 \
         torch==2.10.0+cu130 torchaudio==2.10.0+cu130
 
-# Bez tohohle vyhraje systémový libcublas a i triviální matmul skončí na
+# Without this the system libcublas wins and even a trivial matmul fails with
 # CUBLAS_STATUS_INVALID_VALUE (AiStack Dockerfile.sfx).
 ENV NV_PIP_LIBS=/opt/venv/lib/python3.12/site-packages/nvidia
 ENV LD_LIBRARY_PATH=${NV_PIP_LIBS}/cu13/lib:${NV_PIP_LIBS}/cudnn/lib:${NV_PIP_LIBS}/nccl/lib:${NV_PIP_LIBS}/cusparselt/lib:${LD_LIBRARY_PATH}
@@ -51,7 +51,7 @@ RUN pip install --no-cache-dir \
 COPY app /srv/app
 WORKDIR /srv
 
-# Váhy Demucs se stáhnou při prvním použití do TORCH_HOME (volume /models).
+# Demucs weights download on first use into TORCH_HOME (volume /models).
 ENV SEPARATE_BACKEND=demucs \
     SEPARATE_MODEL=htdemucs_ft \
     SEPARATE_SCRATCH=/scratch \

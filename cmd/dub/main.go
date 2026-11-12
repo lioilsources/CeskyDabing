@@ -1,4 +1,4 @@
-// Command dub je orchestrátor českého AI dabingu (DABING_PLAN.md).
+// Command dub orchestrates Czech AI dubbing of kids' series (Prompts/00-DABING_PLAN.md).
 package main
 
 import (
@@ -39,7 +39,7 @@ func main() {
 		},
 	}
 	root.PersistentFlags().StringVar(&a.cfgPath, "config", config.DefaultPath(), "konfigurační soubor")
-	root.AddCommand(a.addCmd(), a.runCmd(), a.statusCmd(), a.doctorCmd())
+	root.AddCommand(a.addCmd(), a.runCmd(), a.statusCmd(), a.doctorCmd(), a.serviceCmd())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
