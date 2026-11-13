@@ -1,8 +1,8 @@
-// Package storage řeší, jak se soubory dostanou k workeru a zpět.
+// Package storage moves files to a worker and back.
 //
-// Shared: worker vidí stejné NFS (/mnt/dabing) — předávají se jen cesty,
-// případně přemapované, pokud ho worker má jinde. Upload: fallback bez NFS —
-// vstup se nahraje do scratch adresáře workeru a výstupy se stáhnou zpět.
+// Shared: the worker sees the same shared storage, only paths are passed
+// (remapped when the worker mounts it elsewhere). Upload: fallback without
+// shared storage — inputs go to the worker's scratch dir, outputs come back.
 package storage
 
 import (
@@ -15,21 +15,21 @@ import (
 )
 
 type Storage interface {
-	// Input zpřístupní lokální soubor workeru a vrátí cestu, jak ji vidí worker.
+	// Input makes a local file available to the worker and returns its worker path.
 	Input(ctx context.Context, local string) (string, error)
-	// OutputDir vrátí adresář, kam má worker zapsat výstupy patřící do localDir.
+	// OutputDir returns where the worker writes outputs that belong in localDir.
 	OutputDir(ctx context.Context, localDir string) (string, error)
-	// Fetch zajistí, že výstup workeru remote leží lokálně na cestě local.
+	// Fetch makes sure the worker output remote ends up at the local path.
 	Fetch(ctx context.Context, remote, local string) error
 }
 
-// Transport je souborové API workeru (POST/GET /v1/files).
+// Transport is the worker file API (POST/GET /v1/files).
 type Transport interface {
 	Upload(ctx context.Context, local string) (path, dir string, err error)
 	Download(ctx context.Context, remote string, w io.Writer) error
 }
 
-// New vybere implementaci podle configu workeru.
+// New picks the implementation from the worker config.
 func New(kind, localRoot, remoteRoot string, t Transport) (Storage, error) {
 	switch kind {
 	case "", "shared":
@@ -85,8 +85,8 @@ func rebase(p, from, to string) (string, error) {
 	return filepath.Join(to, rel), nil
 }
 
-// Upload si pamatuje scratch adresář posledního nahraného vstupu; výstupy
-// jdou do jeho podadresáře out/. Jedna instance = jedna úloha.
+// Upload remembers the scratch dir of the last uploaded input; outputs go
+// to its out/ subdir. One instance per job.
 type Upload struct {
 	T   Transport
 	dir string

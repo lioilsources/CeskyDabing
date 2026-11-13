@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# M0 smoke test modelů na SPARKu → tabulka jede / nejede / proč.
+# M0 smoke test of the models on SPARK → table works / fails / why.
 #
-# Spouštět NA SPARKU přes broker (staví a spouští kontejnery, bere GPU), např. z M2:
-#   sparkctl run dabing <služby> <priorita> "cd ~/deploy/CeskyDabing && workers/smoke/smoke.sh" "dabing M0 smoke"
+# Runs ON SPARK as a spark-broker job (it builds and starts containers and uses
+# the GPU); see docs/spark.md for the sparkctl command.
 #
-# Výstup: workers/smoke/results.md (+ results.jsonl), poslední řádek JSON metrik.
+# Output: workers/smoke/results.md (+ results.jsonl); the last line is JSON metrics.
 set -uo pipefail
 cd "$(dirname "$0")"
 MODELS=${MODELS:-"whisperx pyannote moss xtts demucs"}
-MODELS_DIR=${MODELS_DIR:-$HOME/deploy/CeskyDabing/models}
+MODELS_DIR=${MODELS_DIR:-$(cd .. && cd .. && pwd)/models}
 mkdir -p "$MODELS_DIR"
 : > results.jsonl
 
@@ -19,7 +19,7 @@ run() { # run <model> <image>
 mkdir -p logs
 for m in $MODELS; do
   case $m in
-    xtts)   img=aistack/audio-tts-xtts:latest ;;          # už postavený image z AiStacku
+    xtts)   img=aistack/audio-tts-xtts:latest ;;          # image already built by AiStack
     demucs) img=dabing/separate:latest
             docker build -q -t "$img" ../separate >"logs/build-$m.log" 2>&1 ;;
     *)      img=dabing/smoke-$m:latest

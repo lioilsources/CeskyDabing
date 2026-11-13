@@ -1,8 +1,8 @@
-// Package pipeline je stavový stroj kroků dabingu jednoho dílu.
+// Package pipeline is the state machine of dubbing steps for one episode.
 //
-// Každý krok zapisuje do work/<serial>/<dil>/ pod pevnými jmény a jeho stav je
-// v tabulce episode_steps. Hotový krok, jehož výstupy na disku existují, se
-// přeskočí. Když se krok spustí znovu, všechny pozdější kroky se zneplatní.
+// Each step writes into work/<series>/<episode>/ under fixed names and its state
+// lives in episode_steps. A done step whose outputs exist on disk is skipped.
+// When a step runs again, every later step is invalidated.
 package pipeline
 
 import (
@@ -21,7 +21,7 @@ import (
 	"github.com/lioilsources/CeskyDabing/internal/store/db"
 )
 
-// Steps je pořadí kroků (DABING_PLAN §2).
+// Steps is the step order (00-DABING_PLAN §2).
 var Steps = []string{
 	"extract", "separate", "transcribe", "identify", "refs",
 	"translate", "synthesize", "fit", "mix", "mux",
@@ -29,7 +29,7 @@ var Steps = []string{
 
 var ErrNotImplemented = errors.New("krok zatím není implementovaný")
 
-// Outputs: jméno výstupu → cesta relativní k pracovnímu adresáři dílu.
+// Outputs maps an output name to a path relative to the episode work dir.
 type Outputs map[string]string
 
 type Episode struct {
@@ -37,8 +37,8 @@ type Episode struct {
 	Series string
 }
 
-// Step je jeden krok pipeline. Run musí být idempotentní a zapisovat výstupy
-// atomicky (dočasný soubor + rename).
+// Step is one pipeline step. Run must be idempotent and write outputs
+// atomically (temp file + rename).
 type Step interface {
 	Run(ctx context.Context, ep *Episode) (Outputs, error)
 }
@@ -50,12 +50,12 @@ type Runner struct {
 }
 
 type Options struct {
-	From  string // spustit znovu od tohoto kroku (předchozí musí být hotové)
-	Until string // skončit po tomto kroku (včetně)
-	Force bool   // spustit znovu i hotové kroky v rozsahu
+	From  string // rerun from this step (earlier steps must be done)
+	Until string // stop after this step (inclusive)
+	Force bool   // rerun done steps in range too
 }
 
-// Validate ověří jména kroků a jejich pořadí.
+// Validate checks step names and their order.
 func (o Options) Validate() error {
 	_, _, err := o.bounds()
 	return err
@@ -109,7 +109,7 @@ func (r *Runner) Run(ctx context.Context, ep *Episode, opt Options) error {
 		if err := r.runStep(ctx, ep, name, step); err != nil {
 			return err
 		}
-		// Spuštěný krok zneplatní všechny pozdější.
+		// A step that ran invalidates every later step.
 		for _, later := range Steps[i+1:] {
 			if err := r.Store.ResetStep(ctx, db.ResetStepParams{EpisodeID: ep.ID, Step: later}); err != nil {
 				return err
@@ -131,7 +131,7 @@ func (r *Runner) runStep(ctx context.Context, ep *Episode, name string, step Ste
 	t0 := time.Now()
 	outs, err := step.Run(ctx, ep)
 	if err != nil {
-		// Zápis selhání nesmí zrušit zrušený kontext.
+		// Recording the failure must survive a cancelled context.
 		_ = r.Store.FailStep(context.WithoutCancel(ctx), db.FailStepParams{Error: err.Error(), EpisodeID: ep.ID, Step: name})
 		return fmt.Errorf("%s: %w", name, err)
 	}
@@ -169,7 +169,7 @@ func (r *Runner) outputsExist(ep *Episode, st db.EpisodeStep) bool {
 	return true
 }
 
-// Status vrátí stav všech kroků v pořadí; chybějící = pending.
+// Status returns all steps in order; missing ones are pending.
 func (r *Runner) Status(ctx context.Context, ep *Episode) ([]db.EpisodeStep, error) {
 	states, err := r.states(ctx, ep.ID)
 	if err != nil {

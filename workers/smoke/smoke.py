@@ -1,6 +1,6 @@
-"""M0 smoke: import modelu + CUDA na sm_121. Vypíše jeden JSON řádek.
+"""M0 smoke: model import + CUDA on sm_121. Prints one JSON line.
 
-SMOKE_LOAD=1 navíc stáhne váhy a model načte na GPU (pomalé, GB dat).
+SMOKE_LOAD=1 also downloads the weights and loads the model on the GPU (slow, GBs).
 """
 
 import json
@@ -38,7 +38,7 @@ def whisperx():
     import ctranslate2
     import whisperx  # noqa: F401
 
-    # faster-whisper stojí na CTranslate2; aarch64 wheely z PyPI bývají jen CPU.
+    # faster-whisper runs on CTranslate2; aarch64 wheels on PyPI are often CPU-only.
     n = ctranslate2.get_cuda_device_count()
     res["ct2_cuda_devices"] = n
     if n == 0:
@@ -75,8 +75,8 @@ def moss():
         AutoProcessor.from_pretrained(mid, trust_remote_code=True)
         AutoModel.from_pretrained(mid, trust_remote_code=True, attn_implementation="sdpa", dtype=torch.bfloat16).to("cuda")
     else:
-        # Jen config + remote code (pár kB), bez vah: ověří, že kód modelu jde
-        # importovat s transformers 5 a torch 2.10.
+        # Config + remote code only (a few kB), no weights: checks that the model
+        # code imports with transformers 5 and torch 2.10.
         from transformers import AutoConfig
 
         AutoConfig.from_pretrained("OpenMOSS-Team/MOSS-TTS-v1.5", trust_remote_code=True)

@@ -1,5 +1,5 @@
-// Package store drží SQLite (stav pipeline, cast, katalog hlasů). DB je cache,
-// zdrojem pravdy pro cast jsou soubory v series/<name>/.
+// Package store holds SQLite (pipeline state, cast, voice catalog). The DB is a
+// cache; the source of truth for the cast is the files in series/<name>/.
 package store
 
 import (
@@ -26,8 +26,8 @@ type Store struct {
 	*db.Queries
 }
 
-// Open otevře (a případně založí) databázi a doběhne migrace.
-// SQLite patří na lokální disk M2, ne na NFS.
+// Open opens (creating if needed) the database and runs migrations.
+// SQLite belongs on a local disk, never on the shared storage.
 func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err

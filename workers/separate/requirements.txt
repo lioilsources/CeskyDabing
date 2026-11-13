@@ -1,8 +1,8 @@
-# Worker separate. torch/torchaudio jsou v constraints (jen cu130 build má kernely pro sm_121).
+# Worker separate. torch/torchaudio are pinned in constraints (only cu130 has sm_121 kernels).
 #
-# demucs 4.0.1 na PyPI pinuje torchaudio<2.1, proto se instaluje --no-deps
-# (Dockerfile) a jeho závislosti jsou vyjmenované tady. torchaudio I/O
-# nepoužíváme — čte/zapisuje soundfile, resample dělá julius.
+# demucs 4.0.1 on PyPI pins torchaudio<2.1, so it is installed with --no-deps
+# (Dockerfile) and its dependencies are listed here. torchaudio I/O is not
+# used — soundfile reads/writes, julius resamples.
 dora-search==0.1.12
 einops==0.8.1
 julius==0.2.7
