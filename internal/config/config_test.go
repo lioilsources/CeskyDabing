@@ -19,7 +19,7 @@ func TestLoadPrecedence(t *testing.T) {
 	}
 	t.Setenv("DUB_ROOT", "/from/env") // real environment beats .env and the file
 	t.Setenv("DUB_TTS_URL", "http://tts.example:9")
-	t.Setenv("SPARK_HOST", "")        // registered for cleanup, then unset below
+	t.Setenv("SPARK_HOST", "") // registered for cleanup, then unset below
 	os.Unsetenv("SPARK_HOST")
 	t.Setenv("DUB_DB", "")
 	os.Unsetenv("DUB_DB")
