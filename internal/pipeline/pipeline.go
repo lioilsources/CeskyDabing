@@ -79,14 +79,21 @@ func (o Options) bounds() (from, until int, err error) {
 	return from, until, nil
 }
 
-func (r *Runner) Run(ctx context.Context, ep *Episode, opt Options) error {
+// Result lists the steps that ran and were skipped in one Run.
+type Result struct {
+	Ran, Skipped []string
+}
+
+// Run executes the steps of one episode. A step left "running" by a killed
+// process is not done, so it simply runs again.
+func (r *Runner) Run(ctx context.Context, ep *Episode, opt Options) (res Result, err error) {
 	from, until, err := opt.bounds()
 	if err != nil {
-		return err
+		return res, err
 	}
 	states, err := r.states(ctx, ep.ID)
 	if err != nil {
-		return err
+		return res, err
 	}
 	for i := 0; i <= until; i++ {
 		name := Steps[i]
@@ -94,30 +101,33 @@ func (r *Runner) Run(ctx context.Context, ep *Episode, opt Options) error {
 		fresh := ok && st.Status == "done" && r.outputsExist(ep, st)
 		if i < from {
 			if !fresh {
-				return fmt.Errorf("--from %s: předchozí krok %s není hotový", opt.From, name)
+				return res, fmt.Errorf("--from %s: předchozí krok %s není hotový", opt.From, name)
 			}
+			res.Skipped = append(res.Skipped, name)
 			continue
 		}
 		if fresh && !opt.Force && opt.From != name {
 			r.Log.Info("přeskakuji, hotovo", "step", name)
+			res.Skipped = append(res.Skipped, name)
 			continue
 		}
 		step := r.Steps[name]
 		if step == nil {
-			return fmt.Errorf("%s: %w", name, ErrNotImplemented)
+			return res, fmt.Errorf("%s: %w", name, ErrNotImplemented)
 		}
 		if err := r.runStep(ctx, ep, name, step); err != nil {
-			return err
+			return res, err
 		}
+		res.Ran = append(res.Ran, name)
 		// A step that ran invalidates every later step.
 		for _, later := range Steps[i+1:] {
 			if err := r.Store.ResetStep(ctx, db.ResetStepParams{EpisodeID: ep.ID, Step: later}); err != nil {
-				return err
+				return res, err
 			}
 			delete(states, later)
 		}
 	}
-	return nil
+	return res, nil
 }
 
 func (r *Runner) runStep(ctx context.Context, ep *Episode, name string, step Step) error {
