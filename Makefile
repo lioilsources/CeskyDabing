@@ -18,7 +18,7 @@ generate:
 
 # Gate before every push.
 gate: generate
-	@test -z "$$(gofmt -l $$(git ls-files '*.go'))" || { gofmt -l $$(git ls-files '*.go'); echo "gofmt"; exit 1; }
+	@test -z "$$(gofmt -l $$(git ls-files -co --exclude-standard '*.go'))" || { gofmt -l $$(git ls-files -co --exclude-standard '*.go'); echo "gofmt"; exit 1; }
 	go vet ./...
 	go test ./...
 	python3 -m py_compile $(PY_SOURCES)
