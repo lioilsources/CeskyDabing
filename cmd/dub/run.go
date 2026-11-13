@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,7 +21,9 @@ import (
 func (a *app) runCmd() *cobra.Command {
 	var opt pipeline.Options
 	var model string
-	var keepStems bool
+	var keepStems, metricsJSON bool
+	var m runMetrics
+	var failures []error
 	cmd := &cobra.Command{
 		Use:   "run <serial> [díl...]",
 		Short: "Spustí pipeline (hotové kroky přeskočí); bez dílů = všechny díly seriálu",
@@ -47,13 +50,28 @@ func (a *app) runCmd() *cobra.Command {
 			for _, ep := range eps {
 				r := *runner
 				r.Log = a.log.With("ep", ep.Series+"/"+ep.Slug)
-				if err := r.Run(ctx, ep, opt); err != nil {
-					return fmt.Errorf("%s/%s: %w", ep.Series, ep.Slug, err)
+				res, err := r.Run(ctx, ep, opt)
+				m.Steps.Ran += len(res.Ran)
+				m.Steps.Skipped += len(res.Skipped)
+				if err != nil {
+					m.Episodes.Failed++
+					failures = append(failures, fmt.Errorf("%s/%s: %w", ep.Series, ep.Slug, err))
+					if ctx.Err() != nil {
+						break // preempted: do not start further episodes
+					}
+					continue
 				}
+				m.Episodes.OK++
 			}
-			return nil
+			if metricsJSON {
+				// sparkctl done/exec reads the last output line as JSON metrics.
+				b, _ := json.Marshal(m)
+				fmt.Println(string(b))
+			}
+			return errors.Join(failures...)
 		},
 	}
+	cmd.Flags().BoolVar(&metricsJSON, "metrics-json", false, "na konci vypsat JSON metriky (poslední řádek pro sparkctl)")
 	cmd.Flags().StringVar(&opt.From, "from", "", "spustit znovu od kroku")
 	cmd.Flags().StringVar(&opt.Until, "until", "", "skončit po kroku")
 	cmd.Flags().BoolVar(&opt.Force, "force", false, "spustit znovu i hotové kroky")
@@ -83,6 +101,17 @@ func (a *app) runner(st *store.Store, model string, keepStems bool) (*pipeline.R
 		}
 	}
 	return &pipeline.Runner{Store: st, Log: a.log, Steps: steps}, nil
+}
+
+type runMetrics struct {
+	Episodes struct {
+		OK     int `json:"ok"`
+		Failed int `json:"failed"`
+	} `json:"episodes"`
+	Steps struct {
+		Ran     int `json:"ran"`
+		Skipped int `json:"skipped"`
+	} `json:"steps"`
 }
 
 // failing is a step that cannot run because its configuration is missing.
