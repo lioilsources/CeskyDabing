@@ -22,3 +22,20 @@ func TestPickAudio(t *testing.T) {
 		}
 	}
 }
+
+func TestParseLoudness(t *testing.T) {
+	out := `[Parsed_ebur128_0 @ 0x1] Summary:
+
+  Integrated loudness:
+    I:         -23.4 LUFS
+    Threshold: -33.6 LUFS
+
+  Loudness range:
+    LRA:         5.1 LU`
+	if v, err := ParseLoudness(out); err != nil || v != -23.4 {
+		t.Fatalf("%v %v", v, err)
+	}
+	if _, err := ParseLoudness("nothing"); err == nil {
+		t.Fatal("missing summary must fail")
+	}
+}
