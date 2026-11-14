@@ -385,6 +385,21 @@ func (q *Queries) ResetStep(ctx context.Context, arg ResetStepParams) error {
 	return err
 }
 
+const setCharacterRef = `-- name: SetCharacterRef :exec
+UPDATE characters SET ref_path = ? WHERE series_id = ? AND name = ?
+`
+
+type SetCharacterRefParams struct {
+	RefPath  string `json:"ref_path"`
+	SeriesID int64  `json:"series_id"`
+	Name     string `json:"name"`
+}
+
+func (q *Queries) SetCharacterRef(ctx context.Context, arg SetCharacterRefParams) error {
+	_, err := q.db.ExecContext(ctx, setCharacterRef, arg.RefPath, arg.SeriesID, arg.Name)
+	return err
+}
+
 const setModelVersions = `-- name: SetModelVersions :exec
 UPDATE episodes SET model_versions = ? WHERE id = ?
 `

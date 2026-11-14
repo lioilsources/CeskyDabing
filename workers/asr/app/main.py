@@ -137,7 +137,7 @@ class Passthrough:
         dur = len(audio) / SR
         segments, t, i = [], 0.2, 0
         while t + 1.5 <= dur:
-            end = min(t + 2.5, dur)
+            end = min(t + 4.0, dur)
             text = f"Line number {i}."
             words, w0 = [], t
             for w in text.split():
