@@ -64,3 +64,25 @@ VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: ListSegments :many
 SELECT * FROM segments WHERE episode_id = ? ORDER BY idx;
+
+-- name: UpsertCharacter :one
+INSERT INTO characters (series_id, name, centroid, centroid_count, f0_mean, f0_std, gender, age_group, strategy, ref_path, speed, notes)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (series_id, name) DO UPDATE SET
+    centroid = excluded.centroid, centroid_count = excluded.centroid_count,
+    f0_mean = excluded.f0_mean, f0_std = excluded.f0_std, gender = excluded.gender,
+    age_group = excluded.age_group, strategy = excluded.strategy, ref_path = excluded.ref_path,
+    speed = excluded.speed, notes = excluded.notes
+RETURNING id;
+
+-- name: ListCharacters :many
+SELECT * FROM characters WHERE series_id = ? ORDER BY name;
+
+-- name: UnlinkCharacterSegments :exec
+UPDATE segments SET character_id = NULL WHERE character_id = ?;
+
+-- name: DeleteCharacter :exec
+DELETE FROM characters WHERE id = ?;
+
+-- name: SetSegmentsCharacter :exec
+UPDATE segments SET character_id = ? WHERE episode_id = ? AND speaker = ?;
