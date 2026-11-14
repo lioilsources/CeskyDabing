@@ -547,6 +547,27 @@ func (q *Queries) SetSegmentCS(ctx context.Context, arg SetSegmentCSParams) erro
 	return err
 }
 
+const setSegmentFit = `-- name: SetSegmentFit :exec
+UPDATE segments SET stretch = ?, fit_iter = ? WHERE episode_id = ? AND idx = ?
+`
+
+type SetSegmentFitParams struct {
+	Stretch   *float64 `json:"stretch"`
+	FitIter   int64    `json:"fit_iter"`
+	EpisodeID int64    `json:"episode_id"`
+	Idx       int64    `json:"idx"`
+}
+
+func (q *Queries) SetSegmentFit(ctx context.Context, arg SetSegmentFitParams) error {
+	_, err := q.db.ExecContext(ctx, setSegmentFit,
+		arg.Stretch,
+		arg.FitIter,
+		arg.EpisodeID,
+		arg.Idx,
+	)
+	return err
+}
+
 const setSegmentTTS = `-- name: SetSegmentTTS :exec
 UPDATE segments SET tts_path = ?, tts_duration = ? WHERE episode_id = ? AND idx = ?
 `
