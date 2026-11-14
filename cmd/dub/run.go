@@ -119,6 +119,7 @@ func (a *app) runner(st *store.Store, so stepOptions) (*pipeline.Runner, error) 
 		}
 		steps["transcribe"] = pipeline.Transcribe{Worker: w, Store: st, Language: so.language, NewStorage: newStorage(wc, w)}
 	}
+	steps["identify"] = pipeline.Identify{Store: st, Root: a.cfg.Root, Log: a.log}
 	return &pipeline.Runner{Store: st, Log: a.log, Steps: steps}, nil
 }
 
