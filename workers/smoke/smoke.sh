@@ -21,7 +21,7 @@ for m in $MODELS; do
   case $m in
     xtts)   img=aistack/audio-tts-xtts:latest ;;          # image already built by AiStack
     demucs) img=dabing/separate:latest
-            docker build -q -t "$img" ../separate >"logs/build-$m.log" 2>&1 ;;
+            docker build -q -t "$img" -f ../separate/Dockerfile .. >"logs/build-$m.log" 2>&1 ;;
     *)      img=dabing/smoke-$m:latest
             docker build --target "$m" -t "$img" . >"logs/build-$m.log" 2>&1 ;;
   esac

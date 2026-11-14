@@ -54,3 +54,13 @@ UPDATE jobs
 SET status = ?, response = ?, error = ?, duration_ms = ?,
     finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?;
+
+-- name: DeleteSegments :exec
+DELETE FROM segments WHERE episode_id = ?;
+
+-- name: InsertSegment :exec
+INSERT INTO segments (episode_id, idx, start_s, end_s, speaker, text_en)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- name: ListSegments :many
+SELECT * FROM segments WHERE episode_id = ? ORDER BY idx;

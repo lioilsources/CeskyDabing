@@ -41,6 +41,15 @@ func (q *Queries) CreateEpisode(ctx context.Context, arg CreateEpisodeParams) (E
 	return i, err
 }
 
+const deleteSegments = `-- name: DeleteSegments :exec
+DELETE FROM segments WHERE episode_id = ?
+`
+
+func (q *Queries) DeleteSegments(ctx context.Context, episodeID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteSegments, episodeID)
+	return err
+}
+
 const failStep = `-- name: FailStep :exec
 UPDATE episode_steps
 SET status = 'failed', error = ?, finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -141,6 +150,32 @@ func (q *Queries) GetSeries(ctx context.Context, slug string) (Series, error) {
 	return i, err
 }
 
+const insertSegment = `-- name: InsertSegment :exec
+INSERT INTO segments (episode_id, idx, start_s, end_s, speaker, text_en)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertSegmentParams struct {
+	EpisodeID int64   `json:"episode_id"`
+	Idx       int64   `json:"idx"`
+	StartS    float64 `json:"start_s"`
+	EndS      float64 `json:"end_s"`
+	Speaker   string  `json:"speaker"`
+	TextEn    string  `json:"text_en"`
+}
+
+func (q *Queries) InsertSegment(ctx context.Context, arg InsertSegmentParams) error {
+	_, err := q.db.ExecContext(ctx, insertSegment,
+		arg.EpisodeID,
+		arg.Idx,
+		arg.StartS,
+		arg.EndS,
+		arg.Speaker,
+		arg.TextEn,
+	)
+	return err
+}
+
 const listEpisodes = `-- name: ListEpisodes :many
 SELECT id, series_id, slug, input_path, work_dir, model_versions, created_at FROM episodes WHERE series_id = ? ORDER BY slug
 `
@@ -162,6 +197,48 @@ func (q *Queries) ListEpisodes(ctx context.Context, seriesID int64) ([]Episode, 
 			&i.WorkDir,
 			&i.ModelVersions,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSegments = `-- name: ListSegments :many
+SELECT id, episode_id, idx, start_s, end_s, speaker, character_id, text_en, text_cs, tts_path, tts_duration, stretch, fit_iter, is_song FROM segments WHERE episode_id = ? ORDER BY idx
+`
+
+func (q *Queries) ListSegments(ctx context.Context, episodeID int64) ([]Segment, error) {
+	rows, err := q.db.QueryContext(ctx, listSegments, episodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Segment
+	for rows.Next() {
+		var i Segment
+		if err := rows.Scan(
+			&i.ID,
+			&i.EpisodeID,
+			&i.Idx,
+			&i.StartS,
+			&i.EndS,
+			&i.Speaker,
+			&i.CharacterID,
+			&i.TextEn,
+			&i.TextCs,
+			&i.TtsPath,
+			&i.TtsDuration,
+			&i.Stretch,
+			&i.FitIter,
+			&i.IsSong,
 		); err != nil {
 			return nil, err
 		}
