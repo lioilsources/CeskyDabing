@@ -19,6 +19,7 @@ type Config struct {
 	// DB is SQLite on the local disk of M2, never on the shared storage.
 	DB      string  `yaml:"db"`
 	Workers Workers `yaml:"workers"`
+	LLM     LLM     `yaml:"llm"`
 	FFmpeg  string  `yaml:"ffmpeg"`
 	FFprobe string  `yaml:"ffprobe"`
 }
@@ -39,6 +40,17 @@ type Worker struct {
 	Timeout    time.Duration `yaml:"timeout"`
 }
 
+// LLM is an OpenAI-compatible endpoint, by default the AiStack gateway on SPARK.
+type LLM struct {
+	URL     string        `yaml:"url"` // .../v1
+	Model   string        `yaml:"model"`
+	APIKey  string        `yaml:"-"` // only from DUB_LLM_KEY
+	Timeout time.Duration `yaml:"timeout"`
+}
+
+// PortGateway of the AiStack LLM gateway on SPARK.
+const PortGateway = 8080
+
 // Default worker ports on SPARK. 8102–8104 are taken by other services there.
 const (
 	PortSeparate = 8101
@@ -56,6 +68,7 @@ func Default() Config {
 			ASR:      Worker{Storage: "shared", Timeout: 30 * time.Minute},
 			TTS:      Worker{Storage: "shared", Timeout: 5 * time.Minute},
 		},
+		LLM:     LLM{Model: "openclaw-default", Timeout: 5 * time.Minute},
 		FFmpeg:  "ffmpeg",
 		FFprobe: "ffprobe",
 	}
@@ -106,6 +119,12 @@ func Load(path string) (Config, error) {
 		if w.w.URL == "" && host != "" {
 			w.w.URL = fmt.Sprintf("http://%s:%d", host, w.port)
 		}
+	}
+	setFromEnv(&cfg.LLM.URL, "DUB_LLM_URL")
+	setFromEnv(&cfg.LLM.Model, "DUB_LLM_MODEL")
+	setFromEnv(&cfg.LLM.APIKey, "DUB_LLM_KEY")
+	if cfg.LLM.URL == "" && host != "" {
+		cfg.LLM.URL = fmt.Sprintf("http://%s:%d/v1", host, PortGateway)
 	}
 	return cfg, nil
 }

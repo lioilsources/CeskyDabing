@@ -51,6 +51,20 @@ v tabulce `episode_steps`, každé volání workeru v `jobs`.
 
 Kroky: extract → separate → transcribe → identify → refs → translate → synthesize → fit → mix → mux.
 
+Soubory seriálu v `series/<serial>/`:
+- `cast.yaml` — postavy (zdroj pravdy). Nová postava se jmenuje `UNKNOWN_n`; jméno, strategii
+  a poznámky můžeš upravit, `centroid` a `episodes` spravuje `dub`.
+- `refs/<postava>.wav` — reference hlasu; existující se nepřepisuje, pro novou ji smaž.
+- `glossary.yaml` — volitelný glosář pro překlad:
+  ```yaml
+  terms:
+    - {en: Bingo, cs: Bingo, note: nesklonňovat}
+    - {en: Keepy Uppy, cs: Nespadni}
+  ```
+
+Překlad jde přes LLM gateway AiStacku (`DUB_LLM_URL`, výchozí model `openclaw-default` = qwen36,
+služba brokeru `qwen36`). Odpověď záložního modelu se odmítne.
+
 ## Worker lokálně (bez GPU)
 
 ```bash
