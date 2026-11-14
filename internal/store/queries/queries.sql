@@ -86,3 +86,6 @@ DELETE FROM characters WHERE id = ?;
 
 -- name: SetSegmentsCharacter :exec
 UPDATE segments SET character_id = ? WHERE episode_id = ? AND speaker = ?;
+
+-- name: SetCharacterRef :exec
+UPDATE characters SET ref_path = ? WHERE series_id = ? AND name = ?;
