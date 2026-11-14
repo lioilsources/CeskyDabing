@@ -1,0 +1,164 @@
+openapi: 3.0.3
+info:
+  title: dabing worker asr
+  version: 0.1.0
+  description: |
+    Transcription + diarization of the vocals track. Stateless: takes paths on the
+    shared storage, writes segments.json and returns its path with a summary.
+    The upload fallback (POST/GET /v1/files) is the same as in worker separate.
+paths:
+  /healthz:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /v1/transcribe:
+    post:
+      operationId: transcribe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TranscribeRequest" }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscribeResult" }
+        default:
+          description: Error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/files:
+    post:
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileRef" }
+        default:
+          description: Error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      operationId: downloadFile
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: File content
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        default:
+          description: Error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status, backend, model, device, loaded]
+      properties:
+        status: { type: string }
+        backend: { type: string, description: "whisperx | passthrough" }
+        model: { type: string }
+        device: { type: string, description: "device of the ASR model; diarization may differ" }
+        loaded: { type: boolean }
+        torch: { type: string }
+    TranscribeRequest:
+      type: object
+      required: [audio_path, output_dir]
+      properties:
+        audio_path: { type: string, description: "vocals.wav on the shared storage" }
+        output_dir: { type: string }
+        language: { type: string, description: "ISO 639-1, default en" }
+        min_speakers: { type: integer, minimum: 1 }
+        max_speakers: { type: integer, minimum: 1 }
+    TranscribeResult:
+      type: object
+      required: [segments_path, language, duration_s, segments, speakers, model, device, elapsed_s]
+      properties:
+        segments_path: { type: string, description: "segments.json (schema Transcript)" }
+        language: { type: string }
+        duration_s: { type: number, format: double }
+        segments: { type: integer }
+        speakers: { type: integer }
+        model: { type: string }
+        device: { type: string }
+        elapsed_s: { type: number, format: double }
+    # Content of segments.json. Not returned over HTTP (it can be large), but it
+    # is part of the contract and the Go types are generated from it.
+    Transcript:
+      type: object
+      required: [language, duration_s, segments, speakers]
+      properties:
+        language: { type: string }
+        duration_s: { type: number, format: double }
+        segments:
+          type: array
+          items: { $ref: "#/components/schemas/Segment" }
+        speakers:
+          type: array
+          items: { $ref: "#/components/schemas/Speaker" }
+    Segment:
+      type: object
+      required: [start, end, text, speaker]
+      properties:
+        start: { type: number, format: double }
+        end: { type: number, format: double }
+        text: { type: string }
+        speaker: { type: string, description: "SPK_xx, empty when unassigned" }
+        words:
+          type: array
+          items: { $ref: "#/components/schemas/Word" }
+    Word:
+      type: object
+      required: [word]
+      properties:
+        word: { type: string }
+        start: { type: number, format: double }
+        end: { type: number, format: double }
+        score: { type: number, format: double }
+    Speaker:
+      type: object
+      required: [id, speech_s, embedding]
+      properties:
+        id: { type: string }
+        speech_s: { type: number, format: double, description: "total speech duration" }
+        embedding:
+          type: array
+          description: "speaker embedding of the diarization model (L2-normalised)"
+          items: { type: number, format: float }
+        f0_mean: { type: number, format: double, description: "Hz, over voiced frames" }
+        f0_std: { type: number, format: double }
+    FileRef:
+      type: object
+      required: [path, dir, size]
+      properties:
+        path: { type: string }
+        dir: { type: string }
+        size: { type: integer, format: int64 }
+    Error:
+      type: object
+      properties:
+        detail: {}

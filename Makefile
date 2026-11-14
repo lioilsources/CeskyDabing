@@ -1,7 +1,7 @@
 export CGO_ENABLED = 0
 
-PY_SOURCES = $(shell git ls-files 'workers/*.py')
-GENERATED = internal/store/db $(wildcard internal/workers/*/client.gen.go)
+PY_SOURCES = $(shell git ls-files -co --exclude-standard 'workers/*.py')
+GENERATED_FILES = $(wildcard internal/store/db/*.go internal/workers/*/client.gen.go)
 
 .PHONY: build test generate gate install deploy-spark
 
@@ -16,13 +16,14 @@ generate:
 	sqlc generate
 	go generate ./...
 
-# Gate before every push.
-gate: generate
+# Gate before every push. Generated code must already match its sources.
+gate:
+	@before=$$(cat $(GENERATED_FILES) | shasum); $(MAKE) -s generate; \
+	  [ "$$before" = "$$(cat $(GENERATED_FILES) | shasum)" ] || { echo "generated code was stale, regenerated: review and commit"; exit 1; }
 	@test -z "$$(gofmt -l $$(git ls-files -co --exclude-standard '*.go'))" || { gofmt -l $$(git ls-files -co --exclude-standard '*.go'); echo "gofmt"; exit 1; }
 	go vet ./...
 	go test ./...
 	python3 -m py_compile $(PY_SOURCES)
-	@git diff --quiet -- $(GENERATED) || { git --no-pager diff --stat -- $(GENERATED); echo "generated code is stale: run make generate and commit"; exit 1; }
 	go build -o bin/dub ./cmd/dub
 
 install: build

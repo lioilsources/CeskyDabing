@@ -3,6 +3,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"errors"
@@ -64,4 +65,17 @@ func migrateUp(conn *sql.DB) error {
 		return err
 	}
 	return nil
+}
+
+// Tx runs fn in a transaction; it is rolled back when fn returns an error.
+func (s *Store) Tx(ctx context.Context, fn func(q *db.Queries) error) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := fn(s.Queries.WithTx(tx)); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }

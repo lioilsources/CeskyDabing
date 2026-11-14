@@ -11,12 +11,15 @@ spark-broker), soubory si předávají přes sdílené úložiště `/mnt/dabing
 ```
 cmd/dub/                    CLI (cobra): add, run, status, doctor, service
 internal/config/            dub.yaml + .env + proměnné prostředí
-internal/pipeline/          stavový stroj kroků, kroky extract + separate
+internal/pipeline/          stavový stroj kroků, kroky extract, separate, transcribe
 internal/media/             ffmpeg/ffprobe
 internal/storage/           shared (cesty) | upload (fallback bez sdíleného úložiště)
 internal/store/             SQLite: migrace (golang-migrate) + sqlc (internal/store/db)
-internal/workers/separate/  Go klient generovaný z workers/separate/openapi.yaml (oapi-codegen)
+internal/workers/<w>/       Go klienti generovaní z workers/<w>/openapi.yaml (oapi-codegen)
+internal/workers/files/     společné souborové API workerů (upload fallback)
+workers/common/             společný kód Python workerů (kořeny, scratch, /v1/files)
 workers/separate/           FastAPI + Demucs htdemucs_ft, Dockerfile pro GB10
+workers/asr/                FastAPI + WhisperX + pyannote (přepis, slova, mluvčí, embedding, F0)
 workers/smoke/              M0 smoke test modelů na sm_121
 deploy/compose.spark.yaml   workery na SPARKu (spouští je broker)
 docs/                       nfs.md (úložiště), spark.md (broker, build, běh)
@@ -51,9 +54,12 @@ Kroky: extract → separate → transcribe → identify → refs → translate �
 ## Worker lokálně (bez GPU)
 
 ```bash
-cd workers/separate
-SEPARATE_BACKEND=passthrough SEPARATE_ROOTS=/tmp/dabing uvicorn app.main:app --port 8101
-DUB_ROOT=/tmp/dabing DUB_SEPARATE_URL=http://localhost:8101 bin/dub run …
+python3 -m venv .venv && .venv/bin/pip install fastapi "uvicorn[standard]" python-multipart numpy soundfile
+cd workers/separate && SEPARATE_BACKEND=passthrough SEPARATE_ROOTS=/tmp/dabing PYTHONPATH=../common \
+  ../../.venv/bin/uvicorn app.main:app --port 8101
+cd workers/asr && ASR_BACKEND=passthrough ASR_ROOTS=/tmp/dabing PYTHONPATH=../common \
+  ../../.venv/bin/uvicorn app.main:app --port 8105
+DUB_ROOT=/tmp/dabing DUB_SEPARATE_URL=http://localhost:8101 DUB_ASR_URL=http://localhost:8105 bin/dub run …
 ```
 
 ## Vývoj

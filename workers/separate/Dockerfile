@@ -8,7 +8,7 @@
 # path is tested there and the image is ~15 GB smaller.
 #
 # Built by a spark-broker job from the repo root (see docs/spark.md):
-#   docker build -t dabing/separate:latest workers/separate
+#   docker build -f workers/separate/Dockerfile -t dabing/separate:latest workers
 #
 # =============================================================================
 
@@ -40,7 +40,7 @@ ENV LD_LIBRARY_PATH=${NV_PIP_LIBS}/cu13/lib:${NV_PIP_LIBS}/cudnn/lib:${NV_PIP_LI
 RUN test -f "${NV_PIP_LIBS}/cu13/lib/libcublas.so.13" \
     || (echo "CHYBA: torch nenainstaloval nvidia/cu13 knihovny — zkontroluj index cu130" && exit 1)
 
-COPY requirements.txt constraints.txt /tmp/
+COPY separate/requirements.txt separate/constraints.txt /tmp/
 RUN pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cu130 \
         -c /tmp/constraints.txt -r /tmp/requirements.txt \
@@ -48,7 +48,8 @@ RUN pip install --no-cache-dir \
     && python3 -c "import torch; assert torch.__version__.startswith('2.10'), torch.__version__" \
     && python3 -c "from demucs.pretrained import get_model; from demucs.apply import apply_model; print('demucs OK')"
 
-COPY app /srv/app
+COPY common/dabing_worker.py /srv/
+COPY separate/app /srv/app
 WORKDIR /srv
 
 # Demucs weights download on first use into TORCH_HOME (volume /models).
@@ -56,7 +57,8 @@ ENV SEPARATE_BACKEND=demucs \
     SEPARATE_MODEL=htdemucs_ft \
     SEPARATE_SCRATCH=/scratch \
     TORCH_HOME=/models/torch \
-    TORCHDYNAMO_DISABLE=1
+    TORCHDYNAMO_DISABLE=1 \
+    PYTHONPATH=/srv
 
 EXPOSE 8101
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
