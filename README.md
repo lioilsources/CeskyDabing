@@ -11,7 +11,7 @@ spark-broker), soubory si předávají přes sdílené úložiště `/mnt/dabing
 ```
 cmd/dub/                    CLI (cobra): add, run, status, doctor, service
 internal/config/            dub.yaml + .env + proměnné prostředí
-internal/pipeline/          stavový stroj kroků, kroky extract, separate, transcribe
+internal/pipeline/          stavový stroj kroků a všech 10 kroků (extract … mux)
 internal/media/             ffmpeg/ffprobe
 internal/storage/           shared (cesty) | upload (fallback bez sdíleného úložiště)
 internal/store/             SQLite: migrace (golang-migrate) + sqlc (internal/store/db)
@@ -45,9 +45,11 @@ bin/dub status
 
 Na SPARK se pipeline pouští přes `sparkctl exec` — viz [docs/spark.md](docs/spark.md).
 
-Výstupy: `work/<serial>/<dil>/` — `audio.wav` (48 kHz), `info.json`, `vocals.wav`,
-`background.wav`, `stems/{drums,bass,other}.wav`, `separate.json`. Stav kroků je
-v tabulce `episode_steps`, každé volání workeru v `jobs`.
+Výstupy v `work/<serial>/<dil>/`: `audio.wav` (48 kHz), `info.json`, `vocals.wav`,
+`background.wav`, `stems/`, `segments.json`, `identify.json`, `refs.json`, `translate.json`,
+`tts/`, `synthesize.json`, `fit/`, `fit.json`, `cs.wav`, `mix.json`, `cs.srt`.
+Hotové video: `done/<serial>/<název>.cs.mkv` (česká stopa výchozí, originál druhý, české titulky).
+Stav kroků je v tabulce `episode_steps`, každé volání workeru a LLM v `jobs`.
 
 Kroky: extract → separate → transcribe → identify → refs → translate → synthesize → fit → mix → mux.
 

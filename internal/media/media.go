@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -144,4 +146,36 @@ func run(ctx context.Context, bin string, args ...string) ([]byte, error) {
 		return nil, fmt.Errorf("%s: %w: %s", filepath.Base(bin), err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.Bytes(), nil
+}
+
+var reLoudness = regexp.MustCompile(`(?m)^\s*I:\s+(-?[0-9.]+|-inf)\s+LUFS`)
+
+// Loudness measures integrated loudness (EBU R128) in LUFS.
+func (f FFmpeg) Loudness(ctx context.Context, path string) (float64, error) {
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, f.FFmpeg, "-nostdin", "-hide_banner", "-nostats", "-i", path,
+		"-af", "ebur128=framelog=quiet", "-f", "null", "-")
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return 0, fmt.Errorf("ffmpeg ebur128: %w: %s", err, strings.TrimSpace(lastLines(stderr.String(), 3)))
+	}
+	return ParseLoudness(stderr.String())
+}
+
+// ParseLoudness reads the integrated loudness from the ebur128 summary.
+func ParseLoudness(out string) (float64, error) {
+	m := reLoudness.FindAllStringSubmatch(out, -1)
+	if len(m) == 0 {
+		return 0, fmt.Errorf("ebur128: v výstupu chybí integrated loudness")
+	}
+	v := m[len(m)-1][1]
+	if v == "-inf" {
+		return math.Inf(-1), nil
+	}
+	return strconv.ParseFloat(v, 64)
+}
+
+func lastLines(s string, n int) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return strings.Join(lines[max(0, len(lines)-n):], "\n")
 }

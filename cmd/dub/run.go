@@ -142,6 +142,8 @@ func (a *app) runner(st *store.Store, so stepOptions) (*pipeline.Runner, error) 
 			Stretch: pipeline.Rubberband{FFmpeg: a.cfg.FFmpeg, Rubberband: a.cfg.Rubberband}, Log: a.log,
 		}
 	}
+	steps["mix"] = pipeline.Mix{Store: st, FF: ff, Log: a.log}
+	steps["mux"] = pipeline.Mux{Store: st, FF: ff, Root: a.cfg.Root}
 	return &pipeline.Runner{Store: st, Log: a.log, Steps: steps}, nil
 }
 
