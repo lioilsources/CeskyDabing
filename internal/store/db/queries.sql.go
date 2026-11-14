@@ -304,6 +304,69 @@ func (q *Queries) ListSegments(ctx context.Context, episodeID int64) ([]Segment,
 	return items, nil
 }
 
+const listSegmentsWithCharacter = `-- name: ListSegmentsWithCharacter :many
+SELECT s.id, s.episode_id, s.idx, s.start_s, s.end_s, s.speaker, s.character_id, s.text_en, s.text_cs, s.tts_path, s.tts_duration, s.stretch, s.fit_iter, s.is_song, COALESCE(c.name, '') AS character_name
+FROM segments s LEFT JOIN characters c ON c.id = s.character_id
+WHERE s.episode_id = ? ORDER BY s.idx
+`
+
+type ListSegmentsWithCharacterRow struct {
+	ID            int64    `json:"id"`
+	EpisodeID     int64    `json:"episode_id"`
+	Idx           int64    `json:"idx"`
+	StartS        float64  `json:"start_s"`
+	EndS          float64  `json:"end_s"`
+	Speaker       string   `json:"speaker"`
+	CharacterID   *int64   `json:"character_id"`
+	TextEn        string   `json:"text_en"`
+	TextCs        string   `json:"text_cs"`
+	TtsPath       string   `json:"tts_path"`
+	TtsDuration   *float64 `json:"tts_duration"`
+	Stretch       *float64 `json:"stretch"`
+	FitIter       int64    `json:"fit_iter"`
+	IsSong        int64    `json:"is_song"`
+	CharacterName string   `json:"character_name"`
+}
+
+func (q *Queries) ListSegmentsWithCharacter(ctx context.Context, episodeID int64) ([]ListSegmentsWithCharacterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSegmentsWithCharacter, episodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSegmentsWithCharacterRow
+	for rows.Next() {
+		var i ListSegmentsWithCharacterRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EpisodeID,
+			&i.Idx,
+			&i.StartS,
+			&i.EndS,
+			&i.Speaker,
+			&i.CharacterID,
+			&i.TextEn,
+			&i.TextCs,
+			&i.TtsPath,
+			&i.TtsDuration,
+			&i.Stretch,
+			&i.FitIter,
+			&i.IsSong,
+			&i.CharacterName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSeries = `-- name: ListSeries :many
 SELECT id, slug, title, created_at FROM series ORDER BY slug
 `
@@ -411,6 +474,21 @@ type SetModelVersionsParams struct {
 
 func (q *Queries) SetModelVersions(ctx context.Context, arg SetModelVersionsParams) error {
 	_, err := q.db.ExecContext(ctx, setModelVersions, arg.ModelVersions, arg.ID)
+	return err
+}
+
+const setSegmentCS = `-- name: SetSegmentCS :exec
+UPDATE segments SET text_cs = ? WHERE episode_id = ? AND idx = ?
+`
+
+type SetSegmentCSParams struct {
+	TextCs    string `json:"text_cs"`
+	EpisodeID int64  `json:"episode_id"`
+	Idx       int64  `json:"idx"`
+}
+
+func (q *Queries) SetSegmentCS(ctx context.Context, arg SetSegmentCSParams) error {
+	_, err := q.db.ExecContext(ctx, setSegmentCS, arg.TextCs, arg.EpisodeID, arg.Idx)
 	return err
 }
 
