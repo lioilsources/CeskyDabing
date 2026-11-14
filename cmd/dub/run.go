@@ -130,10 +130,16 @@ func (a *app) runner(st *store.Store, so stepOptions) (*pipeline.Runner, error) 
 	}
 	if t := a.cfg.TTS; t.URL == "" {
 		steps["synthesize"] = failing{fmt.Errorf("TTS nemá adresu: nastav SPARK_HOST v .env nebo DUB_TTS_URL")}
+		steps["fit"] = steps["synthesize"]
 	} else {
-		steps["synthesize"] = pipeline.Synthesize{
+		synth := pipeline.Synthesize{
 			Store: st, Root: a.cfg.Root, FF: ff, Parallel: t.Parallel, Log: a.log,
 			TTS: tts.NewAiStack(t.URL, t.APIKey, t.VoiceRights, t.VoiceSource, t.Timeout),
+		}
+		steps["synthesize"] = synth
+		steps["fit"] = pipeline.Fit{
+			Synth: synth, LLM: translate.NewHTTPLLM(a.cfg.LLM.URL, a.cfg.LLM.Model, a.cfg.LLM.APIKey, a.cfg.LLM.Timeout),
+			Stretch: pipeline.Rubberband{FFmpeg: a.cfg.FFmpeg, Rubberband: a.cfg.Rubberband}, Log: a.log,
 		}
 	}
 	return &pipeline.Runner{Store: st, Log: a.log, Steps: steps}, nil

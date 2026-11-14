@@ -100,19 +100,7 @@ func (s Synthesize) Run(ctx context.Context, ep *Episode) (Outputs, error) {
 			}
 		}
 		g.Go(func() error {
-			req := tts.Request{Text: sg.TextCs, Language: "cs", VoiceID: voice, Speed: sg.Speed}
-			wav, err := s.TTS.Synthesize(gctx, req)
-			if err != nil {
-				return fmt.Errorf("segment %d: %w", line.Idx, err)
-			}
-			tmp := filepath.Join(filepath.Dir(abs), "."+filepath.Base(abs)+".tmp")
-			if err := os.WriteFile(tmp, wav, 0o644); err != nil {
-				return err
-			}
-			if err := os.Rename(tmp, abs); err != nil {
-				return err
-			}
-			d, err := s.duration(gctx, abs)
+			d, err := s.synthOne(gctx, ep.WorkDir, rel, sg.TextCs, voice, sg.Speed)
 			if err != nil {
 				return fmt.Errorf("segment %d: %w", line.Idx, err)
 			}
@@ -139,6 +127,23 @@ func (s Synthesize) Run(ctx context.Context, ep *Episode) (Outputs, error) {
 		return nil, err
 	}
 	return Outputs{"synthesize": FileSynthesize}, nil
+}
+
+// synthOne synthesizes one line into workDir/rel and returns its duration.
+func (s Synthesize) synthOne(ctx context.Context, workDir, rel, text, voice string, speed float64) (float64, error) {
+	wav, err := s.TTS.Synthesize(ctx, tts.Request{Text: text, Language: "cs", VoiceID: voice, Speed: speed})
+	if err != nil {
+		return 0, err
+	}
+	abs := filepath.Join(workDir, rel)
+	tmp := filepath.Join(filepath.Dir(abs), "."+filepath.Base(abs)+".tmp")
+	if err := os.WriteFile(tmp, wav, 0o644); err != nil {
+		return 0, err
+	}
+	if err := os.Rename(tmp, abs); err != nil {
+		return 0, err
+	}
+	return s.duration(ctx, abs)
 }
 
 // duration reads 16-bit PCM WAV in Go and asks ffprobe only for other formats.
