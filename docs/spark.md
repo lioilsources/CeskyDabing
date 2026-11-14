@@ -11,7 +11,7 @@ SPARKu nespouští nic — ani `docker compose up`, ani build image.
 |---|---|---|---|---|
 | `dabing-separate` | `dabing-separate` | 8101 | změřit (odhad 8 GiB) | definice níže, čeká na PR do AiStacku |
 | `dabing-asr` | `dabing-asr` | 8105 | změřit | worker hotový, PR do AiStacku po smoke testu |
-| `dabing-tts` | `dabing-tts` | 8106 | změřit | M1, možná nahradí služba `tts` |
+| `tts` (AiStack) | `audio-tts-xtts` za službou `audio` | 8093 | už v brokeru | M1 používá tuhle službu, vlastní worker odložený (docs/tts.md) |
 
 Porty 8102–8104 jsou na SPARKu obsazené jinými službami.
 
