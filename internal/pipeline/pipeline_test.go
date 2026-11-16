@@ -55,10 +55,10 @@ func setup(t *testing.T) (*Runner, *Episode, *[]string) {
 func TestRunSkipsDoneAndInvalidatesLater(t *testing.T) {
 	r, ep, runs := setup(t)
 	ctx := context.Background()
-	if err := r.Run(ctx, ep, Options{Until: "transcribe"}); err != nil {
+	if _, err := r.Run(ctx, ep, Options{Until: "transcribe"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Run(ctx, ep, Options{Until: "transcribe"}); err != nil {
+	if _, err := r.Run(ctx, ep, Options{Until: "transcribe"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := len(*runs); got != 3 {
@@ -68,7 +68,7 @@ func TestRunSkipsDoneAndInvalidatesLater(t *testing.T) {
 	// A deleted output reruns that step and every later one.
 	os.Remove(filepath.Join(ep.WorkDir, "separate.txt"))
 	*runs = nil
-	if err := r.Run(ctx, ep, Options{Until: "transcribe"}); err != nil {
+	if _, err := r.Run(ctx, ep, Options{Until: "transcribe"}); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"separate", "transcribe"}; !equal(*runs, want) {
@@ -77,7 +77,7 @@ func TestRunSkipsDoneAndInvalidatesLater(t *testing.T) {
 
 	// --from forces the step and the later ones.
 	*runs = nil
-	if err := r.Run(ctx, ep, Options{From: "extract", Until: "separate"}); err != nil {
+	if _, err := r.Run(ctx, ep, Options{From: "extract", Until: "separate"}); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"extract", "separate"}; !equal(*runs, want) {
@@ -91,7 +91,7 @@ func TestRunSkipsDoneAndInvalidatesLater(t *testing.T) {
 
 func TestRunFromRequiresEarlierDone(t *testing.T) {
 	r, ep, _ := setup(t)
-	err := r.Run(context.Background(), ep, Options{From: "separate", Until: "separate"})
+	_, err := r.Run(context.Background(), ep, Options{From: "separate", Until: "separate"})
 	if err == nil {
 		t.Fatal("čekal jsem chybu: extract není hotový")
 	}
@@ -100,11 +100,11 @@ func TestRunFromRequiresEarlierDone(t *testing.T) {
 func TestRunStopsOnUnimplementedAndFailure(t *testing.T) {
 	r, ep, runs := setup(t)
 	ctx := context.Background()
-	if err := r.Run(ctx, ep, Options{}); !errors.Is(err, ErrNotImplemented) {
+	if _, err := r.Run(ctx, ep, Options{}); !errors.Is(err, ErrNotImplemented) {
 		t.Fatalf("chci ErrNotImplemented, mám %v", err)
 	}
 	r.Steps["separate"] = fakeStep{name: "separate", runs: runs, err: errors.New("bum")}
-	if err := r.Run(ctx, ep, Options{From: "separate", Until: "separate"}); err == nil {
+	if _, err := r.Run(ctx, ep, Options{From: "separate", Until: "separate"}); err == nil {
 		t.Fatal("chci chybu kroku")
 	}
 	status, _ := r.Status(ctx, ep)
@@ -123,4 +123,56 @@ func equal(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+type blockingStep struct{ started chan struct{} }
+
+func (b blockingStep) Run(ctx context.Context, _ *Episode) (Outputs, error) {
+	close(b.started)
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// sparkctl exec stops a preempted command with SIGTERM; the step must end up
+// failed and run again on the next start.
+func TestCancelledStepRunsAgain(t *testing.T) {
+	r, ep, runs := setup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	r.Steps["extract"] = blockingStep{started: started}
+	done := make(chan error)
+	go func() {
+		_, err := r.Run(ctx, ep, Options{Until: "extract"})
+		done <- err
+	}()
+	<-started
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+	status, _ := r.Status(context.Background(), ep)
+	if status[0].Status != "failed" {
+		t.Fatalf("extract: %+v", status[0])
+	}
+
+	r.Steps["extract"] = fakeStep{name: "extract", runs: runs}
+	res, err := r.Run(context.Background(), ep, Options{Until: "extract"})
+	if err != nil || !equal(res.Ran, []string{"extract"}) {
+		t.Fatalf("rerun: %+v, %v", res, err)
+	}
+}
+
+// A process killed with SIGKILL leaves the step "running"; that is not done.
+func TestStaleRunningStepRunsAgain(t *testing.T) {
+	r, ep, runs := setup(t)
+	ctx := context.Background()
+	if err := r.Store.StartStep(ctx, db.StartStepParams{EpisodeID: ep.ID, Step: "extract"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(ctx, ep, Options{Until: "extract"}); err != nil {
+		t.Fatal(err)
+	}
+	if !equal(*runs, []string{"extract"}) {
+		t.Fatalf("runs %v", *runs)
+	}
 }
