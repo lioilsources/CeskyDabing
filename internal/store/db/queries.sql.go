@@ -41,6 +41,15 @@ func (q *Queries) CreateEpisode(ctx context.Context, arg CreateEpisodeParams) (E
 	return i, err
 }
 
+const deleteCharacter = `-- name: DeleteCharacter :exec
+DELETE FROM characters WHERE id = ?
+`
+
+func (q *Queries) DeleteCharacter(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteCharacter, id)
+	return err
+}
+
 const deleteSegments = `-- name: DeleteSegments :exec
 DELETE FROM segments WHERE episode_id = ?
 `
@@ -174,6 +183,48 @@ func (q *Queries) InsertSegment(ctx context.Context, arg InsertSegmentParams) er
 		arg.TextEn,
 	)
 	return err
+}
+
+const listCharacters = `-- name: ListCharacters :many
+SELECT id, series_id, name, centroid, centroid_count, f0_mean, f0_std, gender, age_group, strategy, voice_id, ref_path, speed, notes FROM characters WHERE series_id = ? ORDER BY name
+`
+
+func (q *Queries) ListCharacters(ctx context.Context, seriesID int64) ([]Character, error) {
+	rows, err := q.db.QueryContext(ctx, listCharacters, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Character
+	for rows.Next() {
+		var i Character
+		if err := rows.Scan(
+			&i.ID,
+			&i.SeriesID,
+			&i.Name,
+			&i.Centroid,
+			&i.CentroidCount,
+			&i.F0Mean,
+			&i.F0Std,
+			&i.Gender,
+			&i.AgeGroup,
+			&i.Strategy,
+			&i.VoiceID,
+			&i.RefPath,
+			&i.Speed,
+			&i.Notes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listEpisodes = `-- name: ListEpisodes :many
@@ -348,6 +399,21 @@ func (q *Queries) SetModelVersions(ctx context.Context, arg SetModelVersionsPara
 	return err
 }
 
+const setSegmentsCharacter = `-- name: SetSegmentsCharacter :exec
+UPDATE segments SET character_id = ? WHERE episode_id = ? AND speaker = ?
+`
+
+type SetSegmentsCharacterParams struct {
+	CharacterID *int64 `json:"character_id"`
+	EpisodeID   int64  `json:"episode_id"`
+	Speaker     string `json:"speaker"`
+}
+
+func (q *Queries) SetSegmentsCharacter(ctx context.Context, arg SetSegmentsCharacterParams) error {
+	_, err := q.db.ExecContext(ctx, setSegmentsCharacter, arg.CharacterID, arg.EpisodeID, arg.Speaker)
+	return err
+}
+
 const startJob = `-- name: StartJob :one
 INSERT INTO jobs (episode_id, step, worker, request, status) VALUES (?, ?, ?, ?, 'running')
 RETURNING id
@@ -388,6 +454,61 @@ type StartStepParams struct {
 func (q *Queries) StartStep(ctx context.Context, arg StartStepParams) error {
 	_, err := q.db.ExecContext(ctx, startStep, arg.EpisodeID, arg.Step)
 	return err
+}
+
+const unlinkCharacterSegments = `-- name: UnlinkCharacterSegments :exec
+UPDATE segments SET character_id = NULL WHERE character_id = ?
+`
+
+func (q *Queries) UnlinkCharacterSegments(ctx context.Context, characterID *int64) error {
+	_, err := q.db.ExecContext(ctx, unlinkCharacterSegments, characterID)
+	return err
+}
+
+const upsertCharacter = `-- name: UpsertCharacter :one
+INSERT INTO characters (series_id, name, centroid, centroid_count, f0_mean, f0_std, gender, age_group, strategy, ref_path, speed, notes)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (series_id, name) DO UPDATE SET
+    centroid = excluded.centroid, centroid_count = excluded.centroid_count,
+    f0_mean = excluded.f0_mean, f0_std = excluded.f0_std, gender = excluded.gender,
+    age_group = excluded.age_group, strategy = excluded.strategy, ref_path = excluded.ref_path,
+    speed = excluded.speed, notes = excluded.notes
+RETURNING id
+`
+
+type UpsertCharacterParams struct {
+	SeriesID      int64    `json:"series_id"`
+	Name          string   `json:"name"`
+	Centroid      []byte   `json:"centroid"`
+	CentroidCount int64    `json:"centroid_count"`
+	F0Mean        *float64 `json:"f0_mean"`
+	F0Std         *float64 `json:"f0_std"`
+	Gender        string   `json:"gender"`
+	AgeGroup      string   `json:"age_group"`
+	Strategy      string   `json:"strategy"`
+	RefPath       string   `json:"ref_path"`
+	Speed         float64  `json:"speed"`
+	Notes         string   `json:"notes"`
+}
+
+func (q *Queries) UpsertCharacter(ctx context.Context, arg UpsertCharacterParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertCharacter,
+		arg.SeriesID,
+		arg.Name,
+		arg.Centroid,
+		arg.CentroidCount,
+		arg.F0Mean,
+		arg.F0Std,
+		arg.Gender,
+		arg.AgeGroup,
+		arg.Strategy,
+		arg.RefPath,
+		arg.Speed,
+		arg.Notes,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertSeries = `-- name: UpsertSeries :one
