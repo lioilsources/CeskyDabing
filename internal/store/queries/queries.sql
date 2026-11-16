@@ -89,3 +89,11 @@ UPDATE segments SET character_id = ? WHERE episode_id = ? AND speaker = ?;
 
 -- name: SetCharacterRef :exec
 UPDATE characters SET ref_path = ? WHERE series_id = ? AND name = ?;
+
+-- name: SetSegmentCS :exec
+UPDATE segments SET text_cs = ? WHERE episode_id = ? AND idx = ?;
+
+-- name: ListSegmentsWithCharacter :many
+SELECT s.*, COALESCE(c.name, '') AS character_name
+FROM segments s LEFT JOIN characters c ON c.id = s.character_id
+WHERE s.episode_id = ? ORDER BY s.idx;

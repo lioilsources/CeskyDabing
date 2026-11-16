@@ -36,6 +36,8 @@ func TestLoadPrecedence(t *testing.T) {
 		{cfg.Workers.ASR.URL, "http://gpu.example:8105"},
 		{cfg.Workers.TTS.URL, "http://tts.example:9"},
 		{cfg.Workers.Separate.Storage, "shared"},
+		{cfg.LLM.URL, "http://gpu.example:8080/v1"},
+		{cfg.LLM.Model, "openclaw-default"},
 	} {
 		if c.got != c.want {
 			t.Errorf("got %q, want %q", c.got, c.want)

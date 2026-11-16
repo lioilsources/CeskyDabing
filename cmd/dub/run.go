@@ -16,6 +16,7 @@ import (
 	"github.com/lioilsources/CeskyDabing/internal/storage"
 	"github.com/lioilsources/CeskyDabing/internal/store"
 	"github.com/lioilsources/CeskyDabing/internal/store/db"
+	"github.com/lioilsources/CeskyDabing/internal/translate"
 	"github.com/lioilsources/CeskyDabing/internal/workers/asr"
 	"github.com/lioilsources/CeskyDabing/internal/workers/separate"
 )
@@ -121,6 +122,11 @@ func (a *app) runner(st *store.Store, so stepOptions) (*pipeline.Runner, error) 
 	}
 	steps["identify"] = pipeline.Identify{Store: st, Root: a.cfg.Root, Log: a.log}
 	steps["refs"] = pipeline.Refs{Store: st, Root: a.cfg.Root, Log: a.log}
+	if l := a.cfg.LLM; l.URL == "" {
+		steps["translate"] = failing{fmt.Errorf("LLM nemá adresu: nastav SPARK_HOST v .env nebo DUB_LLM_URL")}
+	} else {
+		steps["translate"] = pipeline.Translate{Store: st, Root: a.cfg.Root, LLM: translate.NewHTTPLLM(l.URL, l.Model, l.APIKey, l.Timeout)}
+	}
 	return &pipeline.Runner{Store: st, Log: a.log, Steps: steps}, nil
 }
 
