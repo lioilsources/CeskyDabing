@@ -20,7 +20,8 @@ Worker lokálně bez GPU: `SEPARATE_BACKEND=passthrough` (viz README).
 - `internal/store/` — SQLite (modernc), migrace, sqlc dotazy; `db/` je generované
 - `internal/workers/<w>/` — Go klient generovaný z `workers/<w>/openapi.yaml`
 - `internal/storage/` — shared (cesty) | upload (fallback bez NFS)
-- `workers/` — Python FastAPI workery, jeden Dockerfile na worker; `smoke/` = test modelů na sm_121
+- `workers/` — Python FastAPI workery (build context `workers/`), `common/` = sdílený kód, `smoke/` = test modelů na sm_121
+- `internal/workers/files/` — společné souborové API workerů v Go
 - `deploy/compose.spark.yaml` — workery na SPARKu (spouští je jen broker)
 - `Prompts/` — plány; aktuální je `01-PLAN-M0-dokonceni-M1.md`
 

@@ -10,7 +10,7 @@ SPARKu nespouští nic — ani `docker compose up`, ani build image.
 | Služba brokeru | Kontejner | Port | Paměť | Stav |
 |---|---|---|---|---|
 | `dabing-separate` | `dabing-separate` | 8101 | změřit (odhad 8 GiB) | definice níže, čeká na PR do AiStacku |
-| `dabing-asr` | `dabing-asr` | 8105 | změřit | M1 |
+| `dabing-asr` | `dabing-asr` | 8105 | změřit | worker hotový, PR do AiStacku po smoke testu |
 | `dabing-tts` | `dabing-tts` | 8106 | změřit | M1, možná nahradí služba `tts` |
 
 Porty 8102–8104 jsou na SPARKu obsazené jinými službami.
@@ -26,6 +26,9 @@ Porty 8102–8104 jsou na SPARKu obsazené jinými službami.
     mem_gib: 8
     max_jobs: 1
 ```
+
+`dabing-asr` bude stejný, jen se službou `asr` a portem 8105. Potřebuje `HF_TOKEN`
+v `.env` na SPARKu (podmínky pyannote 3.1 odsouhlasené na Hugging Face).
 
 K tomu v AiStacku:
 - projekt `dabing` se stropem priority (návrh 30),

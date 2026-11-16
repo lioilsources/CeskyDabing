@@ -27,11 +27,23 @@ services:
     <<: *worker
     container_name: dabing-separate
     image: dabing/separate:latest
-    build: ../workers/separate
+    build: {context: ../workers, dockerfile: separate/Dockerfile}
     ports: ["8101:8101"]
     environment:
       SEPARATE_MODEL: htdemucs_ft
       SEPARATE_IDLE_UNLOAD_S: "600"
       SEPARATE_ROOTS: "${DUB_ROOT:-/mnt/dabing}:/scratch"
 
-  # M1: asr (:8105) and tts (:8106); 8102–8104 are taken on SPARK.
+  asr:
+    <<: *worker
+    container_name: dabing-asr
+    image: dabing/asr:latest
+    build: {context: ../workers, dockerfile: asr/Dockerfile}
+    ports: ["8105:8105"]
+    environment:
+      ASR_MODEL: large-v3
+      ASR_IDLE_UNLOAD_S: "600"
+      ASR_ROOTS: "${DUB_ROOT:-/mnt/dabing}:/scratch"
+      HF_TOKEN: "${HF_TOKEN:-}"
+
+  # M1: tts (:8106); 8102–8104 are taken on SPARK.

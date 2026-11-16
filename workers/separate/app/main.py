@@ -2,47 +2,33 @@
 
 Stateless model wrapper: POST /v1/separate takes paths on the shared storage,
 writes vocals.wav + background.wav and returns their paths. No pipeline logic —
-that lives in the Go orchestrator. Contract: ../openapi.yaml.
+that lives in the Go orchestrator. Contract: ../openapi.yaml. Shared plumbing
+(roots, scratch, /v1/files, idle unload): ../../common/dabing_worker.py.
 
-Environment:
+Environment (plus the SEPARATE_* variables of dabing_worker):
   SEPARATE_BACKEND   demucs | passthrough (passthrough = no model, for tests)
   SEPARATE_MODEL     default model, htdemucs_ft
-  SEPARATE_ROOTS     allowed path roots separated by ":" (default /mnt/dabing:$SEPARATE_SCRATCH)
-  SEPARATE_SCRATCH   scratch for the upload fallback (default /scratch)
-  SEPARATE_SCRATCH_TTL_H  hours after which scratch jobs are deleted (24)
-  SEPARATE_IDLE_UNLOAD_S  release the model from the GPU after idling (600, 0 = never)
 """
 
 from __future__ import annotations
 
-import logging
 import os
-import shutil
-import threading
 import time
-import uuid
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-log = logging.getLogger("separate")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+from dabing_worker import Worker, rms, write_wav
 
 BACKEND = os.environ.get("SEPARATE_BACKEND", "demucs")
 DEFAULT_MODEL = os.environ.get("SEPARATE_MODEL", "htdemucs_ft")
-SCRATCH = Path(os.environ.get("SEPARATE_SCRATCH", "/scratch"))
-SCRATCH_TTL_S = float(os.environ.get("SEPARATE_SCRATCH_TTL_H", "24")) * 3600
-IDLE_UNLOAD_S = float(os.environ.get("SEPARATE_IDLE_UNLOAD_S", "600"))
-ROOTS = [
-    Path(p).resolve()
-    for p in os.environ.get("SEPARATE_ROOTS", f"/mnt/dabing:{SCRATCH}").split(":")
-    if p
-]
+
+worker = Worker("separate", "SEPARATE")
+log = worker.log
+app = worker.app
 
 
 class SeparateRequest(BaseModel):
@@ -66,12 +52,6 @@ class SeparateResult(BaseModel):
     background_rms: float
 
 
-class FileRef(BaseModel):
-    path: str
-    dir: str
-    size: int
-
-
 class Health(BaseModel):
     status: str
     backend: str
@@ -93,7 +73,7 @@ class Passthrough:
     def loaded(self) -> bool:
         return True
 
-    def unload_if_idle(self) -> None:
+    def unload_if_idle(self, idle_s: float) -> None:
         pass
 
     def separate(self, audio: np.ndarray, sr: int, model: str, shifts: int) -> dict[str, np.ndarray]:
@@ -117,15 +97,15 @@ class Demucs:
         if name not in self.models:
             from demucs.pretrained import get_model
 
-            log.info("načítám %s na %s", name, self.device)
+            log.info("loading %s on %s", name, self.device)
             m = get_model(name)
             m.eval()
             self.models = {name: m}  # keep a single model in memory
         return self.models[name]
 
-    def unload_if_idle(self) -> None:
-        if self.models and IDLE_UNLOAD_S > 0 and time.monotonic() - self.last_used > IDLE_UNLOAD_S:
-            log.info("uvolňuji model po %.0f s nečinnosti", IDLE_UNLOAD_S)
+    def unload_if_idle(self, idle_s: float) -> None:
+        if self.models and idle_s > 0 and time.monotonic() - self.last_used > idle_s:
+            log.info("releasing the model after %.0f s idle", idle_s)
             self.models = {}
             if self.device == "cuda":
                 self.torch.cuda.empty_cache()
@@ -161,60 +141,9 @@ class Demucs:
 
 
 backend = Passthrough() if BACKEND == "passthrough" else Demucs()
-gpu_lock = threading.Lock()
-
-
-def _idle_loop() -> None:
-    while True:
-        time.sleep(30)
-        with gpu_lock:
-            backend.unload_if_idle()
-
-
-threading.Thread(target=_idle_loop, daemon=True).start()
-
-# --------------------------------------------------------------------------- helpers
-
-
-def _allowed(p: str) -> Path:
-    path = Path(p).resolve()
-    if not any(path == r or r in path.parents for r in ROOTS):
-        raise HTTPException(400, f"cesta {p} není pod povolenými kořeny {[str(r) for r in ROOTS]}")
-    return path
-
-
-def _write(path: Path, audio: np.ndarray, sr: int) -> None:
-    tmp = path.with_name(f".{path.name}.tmp")
-    sf.write(tmp, np.clip(audio, -1.0, 1.0), sr, subtype="PCM_16", format="WAV")
-    os.replace(tmp, path)
-
-
-def _rms(a: np.ndarray) -> float:
-    return float(np.sqrt(np.mean(np.square(a, dtype=np.float64)))) if a.size else 0.0
-
-
-def _clean_scratch() -> None:
-    if not SCRATCH.is_dir():
-        return
-    now = time.time()
-    for d in SCRATCH.iterdir():
-        try:
-            if d.is_dir() and now - d.stat().st_mtime > SCRATCH_TTL_S:
-                shutil.rmtree(d, ignore_errors=True)
-        except OSError:
-            pass
-
+worker.unload_when_idle(backend)
 
 # --------------------------------------------------------------------------- API
-
-app = FastAPI(title="dabing worker separate", version="0.1.0")
-
-
-@app.exception_handler(Exception)
-def _unhandled(_, e: Exception) -> JSONResponse:
-    # The orchestrator must get a readable error (jobs.error), not a bare 500.
-    log.exception("neošetřená chyba")
-    return JSONResponse(status_code=500, content={"detail": f"{type(e).__name__}: {e}"})
 
 
 @app.get("/healthz", response_model=Health)
@@ -227,11 +156,8 @@ def healthz() -> Health:
 
 @app.post("/v1/separate", response_model=SeparateResult)
 def separate(req: SeparateRequest) -> SeparateResult:
-    src = _allowed(req.input_path)
-    out_dir = _allowed(req.output_dir)
-    if not src.is_file():
-        raise HTTPException(404, f"{src} neexistuje")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    src = worker.input_file(req.input_path)
+    out_dir = worker.output_dir(req.output_dir)
     model = req.model or DEFAULT_MODEL
     shifts = 1 if req.shifts is None else req.shifts
 
@@ -240,54 +166,29 @@ def separate(req: SeparateRequest) -> SeparateResult:
         audio, sr = sf.read(src, dtype="float32", always_2d=True)  # (samples, channels)
     except sf.LibsndfileError as e:
         raise HTTPException(400, f"nečitelné audio {src}: {e}") from e
-    log.info("separuji %s (%.1f s, %d Hz) modelem %s", src, len(audio) / sr, sr, model)
-    with gpu_lock:
-        try:
-            stems = backend.separate(audio, sr, model, shifts)
-        except Exception as e:  # noqa: BLE001 — report to the orchestrator
-            log.exception("separace selhala")
-            raise HTTPException(500, f"{type(e).__name__}: {e}") from e
+    log.info("separating %s (%.1f s, %d Hz) with %s", src, len(audio) / sr, sr, model)
+    with worker.gpu_lock:
+        stems = backend.separate(audio, sr, model, shifts)
 
     vocals = stems.pop("vocals")
     background = sum(stems.values())
     vocals_path, background_path = out_dir / "vocals.wav", out_dir / "background.wav"
-    _write(vocals_path, vocals, sr)
-    _write(background_path, background, sr)
+    write_wav(vocals_path, vocals, sr)
+    write_wav(background_path, background, sr)
     stem_paths = None
     if req.keep_stems:
         (out_dir / "stems").mkdir(exist_ok=True)
         stem_paths = {}
         for name, a in stems.items():
             p = out_dir / "stems" / f"{name}.wav"
-            _write(p, a, sr)
+            write_wav(p, a, sr)
             stem_paths[name] = str(p)
 
     res = SeparateResult(
         vocals_path=str(vocals_path), background_path=str(background_path), stems=stem_paths,
         sample_rate=sr, duration_s=len(audio) / sr, model=model if BACKEND != "passthrough" else "passthrough",
         device=backend.device, elapsed_s=time.monotonic() - t0,
-        vocals_rms=_rms(vocals), background_rms=_rms(background),
+        vocals_rms=rms(vocals), background_rms=rms(background),
     )
-    log.info("hotovo za %.1f s", res.elapsed_s)
+    log.info("done in %.1f s", res.elapsed_s)
     return res
-
-
-@app.post("/v1/files", response_model=FileRef)
-def upload_file(file: UploadFile) -> FileRef:
-    _clean_scratch()
-    job_dir = SCRATCH / uuid.uuid4().hex
-    job_dir.mkdir(parents=True)
-    dst = job_dir / Path(file.filename or "input.wav").name
-    with dst.open("wb") as f:
-        shutil.copyfileobj(file.file, f, length=1 << 20)
-    return FileRef(path=str(dst), dir=str(job_dir), size=dst.stat().st_size)
-
-
-@app.get("/v1/files")
-def download_file(path: str) -> FileResponse:
-    p = Path(path).resolve()
-    if SCRATCH.resolve() not in p.parents:
-        raise HTTPException(400, "stahovat lze jen ze scratch adresáře")
-    if not p.is_file():
-        raise HTTPException(404, f"{p} neexistuje")
-    return FileResponse(p, media_type="application/octet-stream")

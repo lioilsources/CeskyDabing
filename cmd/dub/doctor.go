@@ -10,6 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lioilsources/CeskyDabing/internal/config"
+	"github.com/lioilsources/CeskyDabing/internal/workers/asr"
 	"github.com/lioilsources/CeskyDabing/internal/workers/separate"
 )
 
@@ -44,21 +46,41 @@ func (a *app) doctorCmd() *cobra.Command {
 
 			hctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			wc := a.cfg.Workers.Separate
-			err = wc.Validate("separate")
-			var w *separate.Worker
-			if err == nil {
-				w, err = separate.New(wc.URL, 5*time.Second)
-			}
-			if err == nil {
-				var h *separate.Health
-				if h, err = w.Health(hctx); err == nil {
-					check("worker separate", nil, fmt.Sprintf("%s %s backend=%s model=%s device=%s storage=%s",
-						h.Status, wc.URL, h.Backend, h.Model, h.Device, wc.Storage))
+			for _, w := range []struct {
+				name   string
+				cfg    config.Worker
+				health func(url string) (string, error)
+			}{
+				{"separate", a.cfg.Workers.Separate, func(url string) (string, error) {
+					c, err := separate.New(url, 5*time.Second)
+					if err != nil {
+						return "", err
+					}
+					h, err := c.Health(hctx)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("backend=%s model=%s device=%s", h.Backend, h.Model, h.Device), nil
+				}},
+				{"asr", a.cfg.Workers.ASR, func(url string) (string, error) {
+					c, err := asr.New(url, 5*time.Second)
+					if err != nil {
+						return "", err
+					}
+					h, err := c.Health(hctx)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("backend=%s model=%s device=%s", h.Backend, h.Model, h.Device), nil
+				}},
+			} {
+				msg, err := "", w.cfg.Validate(w.name)
+				if err == nil {
+					if msg, err = w.health(w.cfg.URL); err != nil {
+						err = fmt.Errorf("%s: %w", w.cfg.URL, err)
+					}
 				}
-			}
-			if err != nil {
-				check("worker separate", fmt.Errorf("%s: %w", wc.URL, err), "")
+				check("worker "+w.name, err, fmt.Sprintf("%s %s storage=%s", w.cfg.URL, msg, w.cfg.Storage))
 			}
 			if failed > 0 {
 				return fmt.Errorf("%d kontrol selhalo", failed)

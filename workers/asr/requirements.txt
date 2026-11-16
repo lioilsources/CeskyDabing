@@ -1,0 +1,13 @@
+# Worker asr. torch/torchaudio are pinned in constraints (only cu130 has sm_121 kernels).
+# Versions are verified by workers/smoke on SPARK; whisperx pulls faster-whisper
+# (CTranslate2) and pyannote.audio. CTranslate2 aarch64 wheels may be CPU-only,
+# the worker then runs Whisper on CPU (ASR_WHISPER_DEVICE=auto).
+whisperx>=3.4
+pyannote.audio>=3.3
+librosa==0.11.0
+soundfile==0.13.1
+
+fastapi==0.118.0
+uvicorn[standard]==0.37.0
+pydantic==2.11.7
+python-multipart==0.0.20

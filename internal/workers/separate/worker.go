@@ -2,28 +2,26 @@ package separate
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"mime/multipart"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
+
+	"github.com/lioilsources/CeskyDabing/internal/workers/files"
 )
 
-// Worker wraps the generated client: error responses become errors and it
-// implements storage.Transport for the upload fallback.
+// Worker wraps the generated client: error responses become errors, and the
+// embedded files.Client implements storage.Transport for the upload fallback.
 type Worker struct {
+	files.Client
 	c *ClientWithResponses
 }
 
 func New(url string, timeout time.Duration) (*Worker, error) {
-	c, err := NewClientWithResponses(url, WithHTTPClient(&http.Client{Timeout: timeout}))
+	hc := &http.Client{Timeout: timeout}
+	c, err := NewClientWithResponses(url, WithHTTPClient(hc))
 	if err != nil {
 		return nil, err
 	}
-	return &Worker{c: c}, nil
+	return &Worker{Client: files.Client{Worker: "separate", BaseURL: url, HTTP: hc}, c: c}, nil
 }
 
 func (w *Worker) Health(ctx context.Context) (*Health, error) {
@@ -32,7 +30,7 @@ func (w *Worker) Health(ctx context.Context) (*Health, error) {
 		return nil, err
 	}
 	if r.JSON200 == nil {
-		return nil, apiError(r.HTTPResponse, r.Body, nil)
+		return nil, w.Error(r.StatusCode(), r.Body)
 	}
 	return r.JSON200, nil
 }
@@ -43,66 +41,7 @@ func (w *Worker) Separate(ctx context.Context, req SeparateRequest) (*SeparateRe
 		return nil, err
 	}
 	if r.JSON200 == nil {
-		return nil, apiError(r.HTTPResponse, r.Body, r.JSONDefault)
+		return nil, w.Error(r.StatusCode(), r.Body)
 	}
 	return r.JSON200, nil
-}
-
-func (w *Worker) Upload(ctx context.Context, local string) (string, string, error) {
-	f, err := os.Open(local)
-	if err != nil {
-		return "", "", err
-	}
-	defer f.Close()
-	pr, pw := io.Pipe()
-	mw := multipart.NewWriter(pw)
-	go func() {
-		part, err := mw.CreateFormFile("file", filepath.Base(local))
-		if err == nil {
-			_, err = io.Copy(part, f)
-		}
-		if err == nil {
-			err = mw.Close()
-		}
-		pw.CloseWithError(err)
-	}()
-	r, err := w.c.UploadFileWithBodyWithResponse(ctx, mw.FormDataContentType(), pr)
-	if err != nil {
-		return "", "", err
-	}
-	if r.JSON200 == nil {
-		return "", "", apiError(r.HTTPResponse, r.Body, r.JSONDefault)
-	}
-	return r.JSON200.Path, r.JSON200.Dir, nil
-}
-
-func (w *Worker) Download(ctx context.Context, remote string, dst io.Writer) error {
-	// Not *WithResponse, so a large WAV is streamed instead of buffered.
-	resp, err := w.c.ClientInterface.DownloadFile(ctx, &DownloadFileParams{Path: remote})
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return apiError(resp, body, nil)
-	}
-	_, err = io.Copy(dst, resp.Body)
-	return err
-}
-
-func apiError(resp *http.Response, body []byte, e *Error) error {
-	status := 0
-	if resp != nil {
-		status = resp.StatusCode
-	}
-	if e != nil && e.Detail != nil {
-		if b, err := json.Marshal(e.Detail); err == nil {
-			return fmt.Errorf("worker separate: HTTP %d: %s", status, b)
-		}
-	}
-	if len(body) > 500 {
-		body = body[:500]
-	}
-	return fmt.Errorf("worker separate: HTTP %d: %s", status, body)
 }
