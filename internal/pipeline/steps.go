@@ -15,7 +15,7 @@ import (
 	"github.com/lioilsources/CeskyDabing/internal/workers/separate"
 )
 
-// Pevná jména souborů v pracovním adresáři dílu.
+// Fixed file names in the episode work dir.
 const (
 	FileAudio      = "audio.wav"
 	FileInfo       = "info.json"
@@ -43,10 +43,10 @@ func (s Extract) Run(ctx context.Context, ep *Episode) (Outputs, error) {
 	return Outputs{"audio": FileAudio, "info": FileInfo}, nil
 }
 
-// Separate: audio.wav → vocals.wav + background.wav přes worker separate.
+// Separate: audio.wav → vocals.wav + background.wav via the separate worker.
 type Separate struct {
 	Worker     *separate.Worker
-	NewStorage func() (storage.Storage, error) // nová instance per úloha (upload si drží stav)
+	NewStorage func() (storage.Storage, error) // new instance per job (upload keeps state)
 	Store      *store.Store
 	Model      string
 	KeepStems  bool
@@ -101,7 +101,7 @@ func (s Separate) Run(ctx context.Context, ep *Episode) (Outputs, error) {
 	return outs, nil
 }
 
-// logJob zapíše volání workeru do tabulky jobs (trvání, chyby).
+// logJob records a worker call in the jobs table (duration, errors).
 func logJob[T any](ctx context.Context, st *store.Store, ep *Episode, step, worker string, req any, call func() (T, error)) (T, error) {
 	reqJSON, _ := json.Marshal(req)
 	id, err := st.StartJob(ctx, db.StartJobParams{

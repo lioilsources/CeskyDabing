@@ -65,7 +65,7 @@ func TestRunSkipsDoneAndInvalidatesLater(t *testing.T) {
 		t.Fatalf("druhý běh neměl nic spouštět, běhy: %v", *runs)
 	}
 
-	// Smazaný výstup → krok znovu a všechny pozdější s ním.
+	// A deleted output reruns that step and every later one.
 	os.Remove(filepath.Join(ep.WorkDir, "separate.txt"))
 	*runs = nil
 	if err := r.Run(ctx, ep, Options{Until: "transcribe"}); err != nil {
@@ -75,7 +75,7 @@ func TestRunSkipsDoneAndInvalidatesLater(t *testing.T) {
 		t.Fatalf("běhy %v, chci %v", *runs, want)
 	}
 
-	// --from vynutí krok a pozdější.
+	// --from forces the step and the later ones.
 	*runs = nil
 	if err := r.Run(ctx, ep, Options{From: "extract", Until: "separate"}); err != nil {
 		t.Fatal(err)

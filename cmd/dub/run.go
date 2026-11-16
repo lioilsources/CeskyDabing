@@ -64,25 +64,31 @@ func (a *app) runCmd() *cobra.Command {
 
 func (a *app) runner(st *store.Store, model string, keepStems bool) (*pipeline.Runner, error) {
 	ff := media.FFmpeg{FFmpeg: a.cfg.FFmpeg, FFprobe: a.cfg.FFprobe}
+	steps := map[string]pipeline.Step{"extract": pipeline.Extract{FF: ff}}
+
 	wc := a.cfg.Workers.Separate
-	sep, err := separate.New(wc.URL, wc.Timeout)
-	if err != nil {
-		return nil, err
-	}
-	return &pipeline.Runner{
-		Store: st,
-		Log:   a.log,
-		Steps: map[string]pipeline.Step{
-			"extract": pipeline.Extract{FF: ff},
-			"separate": pipeline.Separate{
-				Worker: sep, Store: st, Model: model, KeepStems: keepStems,
-				NewStorage: func() (storage.Storage, error) {
-					return storage.New(wc.Storage, a.cfg.Root, wc.RemoteRoot, sep)
-				},
+	if err := wc.Validate("separate"); err != nil {
+		// Steps before separate must still work without a configured worker.
+		steps["separate"] = failing{err}
+	} else {
+		sep, err := separate.New(wc.URL, wc.Timeout)
+		if err != nil {
+			return nil, err
+		}
+		steps["separate"] = pipeline.Separate{
+			Worker: sep, Store: st, Model: model, KeepStems: keepStems,
+			NewStorage: func() (storage.Storage, error) {
+				return storage.New(wc.Storage, a.cfg.Root, wc.RemoteRoot, sep)
 			},
-		},
-	}, nil
+		}
+	}
+	return &pipeline.Runner{Store: st, Log: a.log, Steps: steps}, nil
 }
+
+// failing is a step that cannot run because its configuration is missing.
+type failing struct{ err error }
+
+func (f failing) Run(context.Context, *pipeline.Episode) (pipeline.Outputs, error) { return nil, f.err }
 
 func (a *app) episodes(ctx context.Context, st *store.Store, series string, slugs []string) ([]*pipeline.Episode, error) {
 	s, err := st.GetSeries(ctx, slugify(series))

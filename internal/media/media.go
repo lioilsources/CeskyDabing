@@ -1,4 +1,4 @@
-// Package media obaluje ffmpeg/ffprobe z Homebrew.
+// Package media wraps ffmpeg and ffprobe.
 package media
 
 import (
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// SampleRate pracovního audia celé pipeline.
+// SampleRate of all working audio in the pipeline.
 const SampleRate = 48000
 
 type FFmpeg struct {
@@ -21,10 +21,10 @@ type FFmpeg struct {
 	FFprobe string
 }
 
-// Info je výstup ffprobe zúžený na to, co pipeline potřebuje; Raw drží celé JSON.
+// Info is the ffprobe output narrowed to what the pipeline needs; Raw keeps the full JSON.
 type Info struct {
 	Duration    float64         `json:"duration_s"`
-	AudioStream int             `json:"audio_stream"` // index v rámci audio stop (0:a:N)
+	AudioStream int             `json:"audio_stream"` // index among audio streams (0:a:N)
 	AudioLang   string          `json:"audio_lang"`
 	Streams     []Stream        `json:"streams"`
 	Raw         json.RawMessage `json:"ffprobe"`
@@ -63,8 +63,8 @@ func (f FFmpeg) Probe(ctx context.Context, input string) (*Info, error) {
 	return info, nil
 }
 
-// pickAudio vybere zdrojovou stopu: první anglická, jinak výchozí, jinak první.
-// Vrací index mezi audio stopami (pro -map 0:a:N).
+// pickAudio picks the source stream: first English, else default, else first.
+// Returns the index among audio streams (for -map 0:a:N).
 func pickAudio(streams []Stream) (int, string) {
 	eng, def, first := -1, -1, -1
 	var langs []string
@@ -94,8 +94,8 @@ func pickAudio(streams []Stream) (int, string) {
 	return -1, ""
 }
 
-// ExtractAudio vytáhne zvolenou stopu jako stereo PCM WAV 48 kHz.
-// Zapisuje přes dočasný soubor, takže nedokončený výstup nikdy nevypadá hotově.
+// ExtractAudio writes the chosen stream as stereo PCM WAV at 48 kHz.
+// It writes a temp file and renames it, so a partial output never looks done.
 func (f FFmpeg) ExtractAudio(ctx context.Context, input string, audioStream int, out string) error {
 	tmp := tmpName(out)
 	defer os.Remove(tmp)
@@ -110,7 +110,7 @@ func (f FFmpeg) ExtractAudio(ctx context.Context, input string, audioStream int,
 	return os.Rename(tmp, out)
 }
 
-// Duration vrátí délku souboru v sekundách.
+// Duration returns the file length in seconds.
 func (f FFmpeg) Duration(ctx context.Context, path string) (float64, error) {
 	out, err := run(ctx, f.FFprobe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", path)
 	if err != nil {
@@ -119,7 +119,7 @@ func (f FFmpeg) Duration(ctx context.Context, path string) (float64, error) {
 	return strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
 }
 
-// WriteJSON zapíše v atomicky (dočasný soubor + rename).
+// WriteJSON writes v atomically (temp file + rename).
 func WriteJSON(path string, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {

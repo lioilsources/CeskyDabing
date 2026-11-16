@@ -1,10 +1,10 @@
-# Python workery dabingu na SPARKu. Spouštění jen přes spark-broker
-# (sparkctl), nikdy ručně `docker compose up` mimo lease.
+# Dubbing model workers on SPARK. Started and stopped only by spark-broker
+# (service definitions in docs/spark.md), never by hand outside a lease.
 #
-#   cd ~/deploy/CeskyDabing && docker compose -f deploy/compose.spark.yaml build separate
-#
-# /mnt/dabing = NFS export z JODA, stejná cesta jako na M2 (docs/nfs.md).
-# Workery běží pod uživatelem, který vlastní soubory na NFS (DUB_UID/DUB_GID).
+# The shared storage is mounted at /mnt/dabing, the same path as on the
+# orchestrator host (docs/nfs.md). Workers run as the owner of the shared
+# files (DUB_UID/DUB_GID) and are not always-on: restart "no", the model is
+# released after SEPARATE_IDLE_UNLOAD_S.
 name: dabing
 
 x-worker: &worker
@@ -18,18 +18,20 @@ x-worker: &worker
             count: all
             capabilities: [gpu]
   volumes:
-    - /mnt/dabing:/mnt/dabing
+    - ${DUB_ROOT:-/mnt/dabing}:${DUB_ROOT:-/mnt/dabing}
     - ${DUB_MODELS:-../models}:/models
     - ${DUB_SCRATCH:-../scratch}:/scratch
 
 services:
   separate:
     <<: *worker
+    container_name: dabing-separate
     image: dabing/separate:latest
     build: ../workers/separate
     ports: ["8101:8101"]
     environment:
       SEPARATE_MODEL: htdemucs_ft
       SEPARATE_IDLE_UNLOAD_S: "600"
+      SEPARATE_ROOTS: "${DUB_ROOT:-/mnt/dabing}:/scratch"
 
-  # M1: asr (WhisperX + pyannote, :8102) a tts (MOSS-TTS / XTTS v2, :8103).
+  # M1: asr (:8105) and tts (:8106); 8102–8104 are taken on SPARK.

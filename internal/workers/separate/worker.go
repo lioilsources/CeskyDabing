@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// Worker obaluje generovaného klienta: chybové odpovědi převádí na error
-// a implementuje storage.Transport pro upload fallback.
+// Worker wraps the generated client: error responses become errors and it
+// implements storage.Transport for the upload fallback.
 type Worker struct {
 	c *ClientWithResponses
 }
@@ -77,7 +77,7 @@ func (w *Worker) Upload(ctx context.Context, local string) (string, string, erro
 }
 
 func (w *Worker) Download(ctx context.Context, remote string, dst io.Writer) error {
-	// Bez *WithResponse, ať se velký WAV nenačítá celý do paměti.
+	// Not *WithResponse, so a large WAV is streamed instead of buffered.
 	resp, err := w.c.ClientInterface.DownloadFile(ctx, &DownloadFileParams{Path: remote})
 	if err != nil {
 		return err

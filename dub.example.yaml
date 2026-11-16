@@ -1,12 +1,8 @@
-# ~/.config/dub/dub.yaml (nebo $DUB_CONFIG). Všechny klíče jsou volitelné.
-root: /mnt/dabing                        # NFS export z JODA, stejná cesta na M2 i Sparku
-db: ~/.local/share/dub/dub.db            # SQLite na lokálním disku M2 (ne na NFS)
+# ~/.config/dub/dub.yaml (or $DUB_CONFIG). Every key is optional; .env and environment win.
+root: /mnt/dabing                 # shared storage, same path on M2 and SPARK
+db: ~/.local/share/dub/dub.db     # SQLite on the local disk of M2
 workers:
   separate:
-    url: http://spark:8101
-    storage: shared                      # shared (cesty přes NFS) | upload (fallback bez NFS)
+    url: http://spark.example:8101   # default: http://$SPARK_HOST:8101
+    storage: shared                  # shared | upload
     timeout: 30m
-  asr:
-    url: http://spark:8102
-  tts:
-    url: http://spark:8103

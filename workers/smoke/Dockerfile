@@ -1,9 +1,8 @@
 # =============================================================================
-# M0 smoke test modelů na GB10 (sm_121): jede / nejede / proč.
+# M0 smoke test of the models on GB10 (sm_121): works / fails / why.
 #
-# Každý model má vlastní target (navzájem se tlučou v závislostech). Všechny
-# stojí na stejném základu jako worker separate: CUDA 13 + torch 2.10 cu130.
-# Spouští se přes smoke.sh, ne ručně.
+# Each model has its own target (their dependencies clash). All share the base
+# of the separate worker: CUDA 13 + torch 2.10 cu130. Run through smoke.sh.
 # =============================================================================
 
 ARG CUDA_TAG=13.0.1-runtime-ubuntu24.04
@@ -24,7 +23,7 @@ ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu130 \
     TORCHDYNAMO_DISABLE=1 HF_HOME=/models/hf
 RUN printf 'torch==2.10.0+cu130\ntorchaudio==2.10.0+cu130\n' > /constraints.txt
 COPY smoke.py /smoke.py
-# Instalace smí selhat — selhání se zapíše a smoke.py ho nahlásí jako "nejede".
+# Installs may fail; the failure is logged and smoke.py reports it.
 SHELL ["/bin/bash", "-c"]
 
 FROM base AS whisperx
@@ -35,9 +34,9 @@ FROM base AS pyannote
 RUN pip install --no-cache-dir -c /constraints.txt "pyannote.audio>=3.1" > /install.log 2>&1 \
     || echo "FAIL pip install pyannote.audio" >> /install.log
 
-# MOSS-TTS pinuje torch 2.9.1+cu128 jen v extra [torch-runtime] (cu128 nemá
-# kernely pro sm_121) → instaluje se bez něj a runtime stack se doplní ručně
-# s torch 2.10 cu130. Model se načítá přes transformers trust_remote_code.
+# MOSS-TTS pins torch 2.9.1+cu128 only in the [torch-runtime] extra (cu128 has
+# no sm_121 kernels), so it is installed without it and the runtime stack is
+# added on torch 2.10 cu130. The model loads via transformers trust_remote_code.
 FROM base AS moss
 RUN git clone --depth 1 https://github.com/OpenMOSS/MOSS-TTS.git /opt/moss \
     && (pip install --no-cache-dir -c /constraints.txt -e /opt/moss \

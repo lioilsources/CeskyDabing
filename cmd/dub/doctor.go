@@ -13,7 +13,7 @@ import (
 	"github.com/lioilsources/CeskyDabing/internal/workers/separate"
 )
 
-// doctorCmd ověří prostředí M2: sdílené úložiště, nástroje, DB, workery.
+// doctorCmd checks the orchestrator host: shared storage, tools, DB, workers.
 func (a *app) doctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
@@ -45,7 +45,11 @@ func (a *app) doctorCmd() *cobra.Command {
 			hctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			wc := a.cfg.Workers.Separate
-			w, err := separate.New(wc.URL, 5*time.Second)
+			err = wc.Validate("separate")
+			var w *separate.Worker
+			if err == nil {
+				w, err = separate.New(wc.URL, 5*time.Second)
+			}
 			if err == nil {
 				var h *separate.Health
 				if h, err = w.Health(hctx); err == nil {
@@ -64,7 +68,7 @@ func (a *app) doctorCmd() *cobra.Command {
 	}
 }
 
-// checkRoot: kořen existuje, je zapisovatelný a má adresáře z plánu.
+// checkRoot: the root exists, is writable and has the planned subdirectories.
 func checkRoot(root string) (string, error) {
 	if _, err := os.Stat(root); err != nil {
 		return "", err

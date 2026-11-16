@@ -1,18 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!--
-  M4: `dub serve` jako launchd služba na M2 (watch folder incoming/ → done/).
-  V M0 příkaz serve ještě neexistuje — plist se zatím nenačítá.
-    cp deploy/launchd/com.ol1n.dub.plist ~/Library/LaunchAgents/
-    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ol1n.dub.plist
--->
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.ol1n.dub</string>
+  <string>{{.Label}}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/dub</string>
+    <string>{{.Binary}}</string>
     <string>serve</string>
   </array>
   <key>EnvironmentVariables</key>
@@ -25,8 +19,8 @@
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/ol1n/Library/Logs/dub.log</string>
+  <string>{{.Log}}</string>
   <key>StandardErrorPath</key>
-  <string>/Users/ol1n/Library/Logs/dub.log</string>
+  <string>{{.Log}}</string>
 </dict>
 </plist>

@@ -1,51 +1,64 @@
 # CeskyDabing
 
-Lokální AI dabing dětských seriálů EN → CS (jen pro rodinu). Plán: [Prompts/00-DABING_PLAN.md](Prompts/00-DABING_PLAN.md).
+Lokální AI dabing dětských seriálů EN → CS (jen pro rodinu). Plán: [Prompts/00-DABING_PLAN.md](Prompts/00-DABING_PLAN.md),
+aktuální postup: [Prompts/01-PLAN-M0-dokonceni-M1.md](Prompts/01-PLAN-M0-dokonceni-M1.md).
 
-Go orchestrátor `dub` na Mac Mini M2, Python model workery na SPARKu, úložiště JODA přes NFS `/mnt/dabing`.
+Go orchestrátor `dub` běží na dev Macu, Python model workery na GPU stroji (SPARK, jen přes
+spark-broker), soubory si předávají přes sdílené úložiště `/mnt/dabing`.
 
 ## Struktura
 
 ```
-cmd/dub/                    CLI (cobra): add, run, status, doctor
-internal/config/            dub.yaml + env (DUB_ROOT, DUB_DB, DUB_SEPARATE_URL, DUB_SEPARATE_STORAGE)
+cmd/dub/                    CLI (cobra): add, run, status, doctor, service
+internal/config/            dub.yaml + .env + proměnné prostředí
 internal/pipeline/          stavový stroj kroků, kroky extract + separate
 internal/media/             ffmpeg/ffprobe
-internal/storage/           shared (NFS, cesty) | upload (fallback bez NFS)
+internal/storage/           shared (cesty) | upload (fallback bez sdíleného úložiště)
 internal/store/             SQLite: migrace (golang-migrate) + sqlc (internal/store/db)
 internal/workers/separate/  Go klient generovaný z workers/separate/openapi.yaml (oapi-codegen)
 workers/separate/           FastAPI + Demucs htdemucs_ft, Dockerfile pro GB10
 workers/smoke/              M0 smoke test modelů na sm_121
-deploy/                     compose.spark.yaml, launchd plist (M4)
-docs/nfs.md                 nastavení NFS JODA → M2 + SPARK
+deploy/compose.spark.yaml   workery na SPARKu (spouští je broker)
+docs/                       nfs.md (úložiště), spark.md (broker, build, běh)
+```
+
+## Nastavení
+
+```bash
+cp .env.example .env              # SPARK_HOST a další; .env se necommituje
+cp dub.example.yaml ~/.config/dub/dub.yaml   # volitelné
+make build
+bin/dub doctor                    # úložiště, ffmpeg, rubberband, SQLite, workery
 ```
 
 ## Použití
 
 ```bash
-make build                                  # bin/dub
-cp dub.example.yaml ~/.config/dub/dub.yaml  # volitelné
-bin/dub doctor                              # NFS, ffmpeg, rubberband, SQLite, workery
 bin/dub add bluey /mnt/dabing/incoming/bluey/Bluey.S01E03.mkv   # → díl s01e03
 bin/dub run bluey --until separate          # hotové kroky přeskočí
 bin/dub run bluey s01e03 --from separate    # znovu od kroku (pozdější kroky se zneplatní)
 bin/dub status
 ```
 
+Na SPARK se pipeline pouští přes `sparkctl exec` — viz [docs/spark.md](docs/spark.md).
+
 Výstupy: `work/<serial>/<dil>/` — `audio.wav` (48 kHz), `info.json`, `vocals.wav`,
 `background.wav`, `stems/{drums,bass,other}.wav`, `separate.json`. Stav kroků je
 v tabulce `episode_steps`, každé volání workeru v `jobs`.
 
-Kroky: extract → separate → transcribe → identify → refs → translate → synthesize → fit → mix → mux
-(M0 má extract + separate, ostatní vrátí „krok zatím není implementovaný“).
+Kroky: extract → separate → transcribe → identify → refs → translate → synthesize → fit → mix → mux.
 
 ## Worker lokálně (bez GPU)
 
 ```bash
 cd workers/separate
 SEPARATE_BACKEND=passthrough SEPARATE_ROOTS=/tmp/dabing uvicorn app.main:app --port 8101
+DUB_ROOT=/tmp/dabing DUB_SEPARATE_URL=http://localhost:8101 bin/dub run …
 ```
 
-## Generování
+## Vývoj
 
+`make gate` před každým pushem (generate, gofmt, vet, test, py_compile, build).
 `make generate` = `sqlc generate` + `go generate ./...` (oapi-codegen jako `go tool`).
+
+Launchd služba pro `dub serve` (M4): `bin/dub service plist > ~/Library/LaunchAgents/io.github.lioilsources.dub.plist`.

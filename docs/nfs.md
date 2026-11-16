@@ -1,64 +1,37 @@
-# NFS `/mnt/dabing` (JODA → M2 + SPARK)
+# Sdílené úložiště `/mnt/dabing`
 
-Orchestrátor (M2) a workery (SPARK) si předávají jen cesty, takže obě strany musí
-vidět úložiště pod **stejnou cestou** `/mnt/dabing`. Nic z toho zatím není nastavené
-(stav 2026-10-26: `/mnt/dabing` neexistuje, JODA nemá `/etc/exports`). Všechny kroky
-potřebují sudo — dělá je uživatel.
+Orchestrátor (M2) a workery (SPARK) si předávají jen cesty k souborům. Proto musí obě
+strany vidět úložiště pod **stejnou cestou**, výchozí je `/mnt/dabing` (`DUB_ROOT`).
+Kdyby to na jedné straně nešlo, worker dostane v configu `remote_root` a cesty se
+přepisují — to je ale jen nouzovka.
 
-Dokud NFS neběží, jde pipeline pustit s fallbackem `storage: upload`
-(`DUB_SEPARATE_STORAGE=upload`): audio se nahraje na worker, výstupy se stáhnou zpět.
+Konkrétní příkazy pro export a mount (vyžadují sudo) má vlastník mimo toto repo.
 
-## 1. JODA (192.168.88.88) — export
+## Požadavky
 
-`/pool` je ZFS s 7,2 TB volného místa (`/media` je na 96 %).
+1. **Stejná cesta** na M2 i na SPARKu.
+2. **Zápis z obou stran pod jedním vlastníkem.** Kontejnery workerů běží pod
+   `DUB_UID:DUB_GID`, M2 pod svým uživatelem. Server má mapovat všechny klienty na
+   jednoho vlastníka (u NFS `all_squash` + `anonuid/anongid`).
+3. **Atomický `rename`** v rámci adresáře. Všechno se zapisuje jako `.jméno.tmp`
+   a přejmenuje, takže nedokončený soubor nikdy nevypadá hotově.
+4. **Podadresáře:** `incoming/ work/ done/ voices/ series/`.
+5. **Kapacita:** jeden 22minutový díl zabere ve `work/` zhruba 1,5–2 GB (několik WAV
+   po ~250 MB) plus vstupní a výstupní MKV. Série o 50 dílech jsou desítky až ~150 GB,
+   pokud se `work/` nečistí.
+6. **Propustnost:** stačí gigabit. Nejtěžší je mux (`-c:v copy`), kdy se přes síť čte
+   a zapisuje celé video. Když bude pomalý, mux dělat do lokálního dočasného adresáře.
 
-```bash
-sudo zfs create -o compression=lz4 -o recordsize=1M pool/dabing   # → /pool/dabing
-sudo mkdir -p /pool/dabing/{incoming,work,done,voices,series}
-sudo chown -R oli:oli /pool/dabing
-sudo apt install -y nfs-kernel-server
-echo '/pool/dabing 192.168.88.0/24(rw,sync,no_subtree_check,all_squash,anonuid=1000,anongid=1000,insecure)' \
-  | sudo tee -a /etc/exports
-sudo exportfs -ra && sudo systemctl enable --now nfs-server
-```
+SQLite na sdíleném úložišti **není** — databáze je lokálně na M2 (`DUB_DB`).
 
-`all_squash` na uid/gid 1000 (`oli`) — M2 (uid 501), SPARK (`ol1n`) i kontejnery
-workerů pak zapisují jako jeden vlastník. `insecure` je kvůli macOS klientovi.
-Ověř `id -u oli` na JODA a případně uprav `anonuid`.
+## Bez sdíleného úložiště
 
-## 2. SPARK (192.168.88.66)
+Pipeline jede i bez něj: `DUB_SEPARATE_STORAGE=upload` (nebo `storage: upload`
+v `dub.yaml`). Audio se nahraje na worker přes `POST /v1/files` a výstupy se stáhnou
+zpět. Je to pomalejší, ale funkčně stejné.
 
-```bash
-sudo apt install -y nfs-common
-sudo mkdir -p /mnt/dabing
-echo '192.168.88.88:/pool/dabing /mnt/dabing nfs4 rw,hard,noatime,rsize=1048576,wsize=1048576,_netdev 0 0' \
-  | sudo tee -a /etc/fstab
-sudo mount /mnt/dabing && touch /mnt/dabing/.spark-ok && ls -la /mnt/dabing
-```
-
-## 3. Mac Mini M2
-
-Kořen systému je na macOS jen pro čtení, `/mnt` se musí vytvořit přes `synthetic.conf`
-(vyžaduje restart) a mount přes autofs:
+## Ověření
 
 ```bash
-printf 'mnt\tSystem/Volumes/Data/mnt\n' | sudo tee -a /etc/synthetic.conf
-sudo mkdir -p /System/Volumes/Data/mnt/dabing
-# restart, pak:
-# autofs mapu dát na skutečnou cestu (ne přes symlink /mnt)
-echo '/System/Volumes/Data/mnt/dabing  -fstype=nfs,vers=4,resvport,rw,hard,nolocks,rsize=1048576,wsize=1048576  nfs://192.168.88.88/pool/dabing' \
-  | sudo tee /etc/auto_dabing
-echo '/-  auto_dabing  -nosuid' | sudo tee -a /etc/auto_master
-sudo automount -cv
-ls /mnt/dabing
+bin/dub doctor   # úložiště: fs=nfs, zapisovatelné, žádné chybějící adresáře
 ```
-
-## 4. Ověření
-
-```bash
-dub doctor        # na M2: fs=nfs, zapisovatelné, adresáře incoming/work/done/voices/series
-ssh spark 'ls -la /mnt/dabing && cat /mnt/dabing/.spark-ok && echo ok'
-```
-
-Pokud bude NFS pro `-c:v copy` mux velkých MKV pomalé (DABING_PLAN §10), změřit
-`dd if=/mnt/dabing/… of=/dev/null bs=1m` a případně mux dělat na lokálním disku M2.

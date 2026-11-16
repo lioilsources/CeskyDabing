@@ -75,7 +75,7 @@ var (
 	reNonID = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
-// episodeSlug: "Bluey.S02E07.1080p.mkv" → "s02e07", jinak slug z názvu souboru.
+// episodeSlug: "Bluey.S02E07.1080p.mkv" → "s02e07", otherwise a slug of the file name.
 func episodeSlug(path string) string {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	if m := reSxE.FindStringSubmatch(base); m != nil {
@@ -91,7 +91,7 @@ func pad(s string, n int) string {
 	return s
 }
 
-// slugify: "Prasátko Pepa" → "prasatko-pepa".
+// slugify strips diacritics: "Prasátko Pepa" → "prasatko-pepa".
 func slugify(s string) string {
 	var b strings.Builder
 	for _, r := range norm.NFD.String(strings.ToLower(s)) {

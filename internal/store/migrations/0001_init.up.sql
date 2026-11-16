@@ -1,5 +1,5 @@
--- Datový model dabingu (DABING_PLAN §6). Embeddingy jsou little-endian []float32 BLOB,
--- cosine se počítá v Go. Cesty jsou relativní ke kořeni úložiště (/mnt/dabing).
+-- Dubbing data model (00-DABING_PLAN §6). Embeddings are little-endian []float32 BLOBs,
+-- cosine is computed in Go. Paths are relative to the storage root.
 
 CREATE TABLE series (
     id          INTEGER PRIMARY KEY,
@@ -14,12 +14,12 @@ CREATE TABLE episodes (
     slug            TEXT    NOT NULL,
     input_path      TEXT    NOT NULL,
     work_dir        TEXT    NOT NULL,
-    model_versions  TEXT    NOT NULL DEFAULT '{}',  -- JSON {krok: verze modelu}
+    model_versions  TEXT    NOT NULL DEFAULT '{}',  -- JSON {step: model version}
     created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (series_id, slug)
 );
 
--- Stav kroků pipeline per díl. outputs = JSON {jméno: relativní cesta}.
+-- Pipeline step state per episode. outputs = JSON {name: relative path}.
 CREATE TABLE episode_steps (
     episode_id   INTEGER NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
     step         TEXT    NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE characters (
     series_id       INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
     name            TEXT    NOT NULL,
     centroid        BLOB,
-    centroid_count  INTEGER NOT NULL DEFAULT 0,  -- kolik dílů je v klouzavém průměru
+    centroid_count  INTEGER NOT NULL DEFAULT 0,  -- episodes in the running average
     f0_mean         REAL,
     f0_std          REAL,
     gender          TEXT    NOT NULL DEFAULT '',
@@ -51,14 +51,14 @@ CREATE TABLE characters (
 
 CREATE TABLE voices (
     id          INTEGER PRIMARY KEY,
-    slug        TEXT    NOT NULL UNIQUE,      -- např. cz_m_042
+    slug        TEXT    NOT NULL UNIQUE,      -- e.g. cz_m_042
     path        TEXT    NOT NULL,             -- voices/<slug>/
     gender      TEXT    NOT NULL DEFAULT '',
     age_group   TEXT    NOT NULL DEFAULT '',
     f0_mean     REAL,
     f0_std      REAL,
     embedding   BLOB,
-    tags        TEXT    NOT NULL DEFAULT '[]', -- JSON pole
+    tags        TEXT    NOT NULL DEFAULT '[]', -- JSON array
     source      TEXT    NOT NULL DEFAULT '',
     license     TEXT    NOT NULL DEFAULT '',
     meta        TEXT    NOT NULL DEFAULT '{}'
@@ -70,7 +70,7 @@ CREATE TABLE segments (
     idx           INTEGER NOT NULL,
     start_s       REAL    NOT NULL,
     end_s         REAL    NOT NULL,
-    speaker       TEXT    NOT NULL DEFAULT '',  -- SPK_xx z diarizace
+    speaker       TEXT    NOT NULL DEFAULT '',  -- SPK_xx from diarization
     character_id  INTEGER REFERENCES characters(id),
     text_en       TEXT    NOT NULL DEFAULT '',
     text_cs       TEXT    NOT NULL DEFAULT '',
@@ -82,7 +82,7 @@ CREATE TABLE segments (
     UNIQUE (episode_id, idx)
 );
 
--- Každé volání workeru / LLM.
+-- Every worker / LLM call.
 CREATE TABLE jobs (
     id           INTEGER PRIMARY KEY,
     episode_id   INTEGER REFERENCES episodes(id) ON DELETE CASCADE,
