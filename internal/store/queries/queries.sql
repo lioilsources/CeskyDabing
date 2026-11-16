@@ -97,3 +97,13 @@ UPDATE segments SET text_cs = ? WHERE episode_id = ? AND idx = ?;
 SELECT s.*, COALESCE(c.name, '') AS character_name
 FROM segments s LEFT JOIN characters c ON c.id = s.character_id
 WHERE s.episode_id = ? ORDER BY s.idx;
+
+-- name: ListSegmentsForTTS :many
+SELECT s.id, s.idx, s.start_s, s.end_s, s.text_cs, s.tts_path, s.is_song,
+       COALESCE(c.name, '') AS character_name, COALESCE(c.ref_path, '') AS ref_path,
+       COALESCE(c.speed, 1.0) AS speed
+FROM segments s LEFT JOIN characters c ON c.id = s.character_id
+WHERE s.episode_id = ? ORDER BY s.idx;
+
+-- name: SetSegmentTTS :exec
+UPDATE segments SET tts_path = ?, tts_duration = ? WHERE episode_id = ? AND idx = ?;

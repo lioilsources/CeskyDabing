@@ -19,6 +19,8 @@ func TestLoadPrecedence(t *testing.T) {
 	}
 	t.Setenv("DUB_ROOT", "/from/env") // real environment beats .env and the file
 	t.Setenv("DUB_TTS_URL", "http://tts.example:9")
+	t.Setenv("DUB_TTS_VOICE_RIGHTS", "")
+	os.Unsetenv("DUB_TTS_VOICE_RIGHTS")
 	t.Setenv("SPARK_HOST", "") // registered for cleanup, then unset below
 	os.Unsetenv("SPARK_HOST")
 	t.Setenv("DUB_DB", "")
@@ -34,7 +36,8 @@ func TestLoadPrecedence(t *testing.T) {
 		{cfg.DB, filepath.Join(home, "x.db")},
 		{cfg.Workers.Separate.URL, "http://gpu.example:8101"},
 		{cfg.Workers.ASR.URL, "http://gpu.example:8105"},
-		{cfg.Workers.TTS.URL, "http://tts.example:9"},
+		{cfg.TTS.URL, "http://tts.example:9"},
+		{cfg.TTS.VoiceRights, ""}, // never defaulted
 		{cfg.Workers.Separate.Storage, "shared"},
 		{cfg.LLM.URL, "http://gpu.example:8080/v1"},
 		{cfg.LLM.Model, "openclaw-default"},

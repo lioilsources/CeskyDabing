@@ -304,6 +304,61 @@ func (q *Queries) ListSegments(ctx context.Context, episodeID int64) ([]Segment,
 	return items, nil
 }
 
+const listSegmentsForTTS = `-- name: ListSegmentsForTTS :many
+SELECT s.id, s.idx, s.start_s, s.end_s, s.text_cs, s.tts_path, s.is_song,
+       COALESCE(c.name, '') AS character_name, COALESCE(c.ref_path, '') AS ref_path,
+       COALESCE(c.speed, 1.0) AS speed
+FROM segments s LEFT JOIN characters c ON c.id = s.character_id
+WHERE s.episode_id = ? ORDER BY s.idx
+`
+
+type ListSegmentsForTTSRow struct {
+	ID            int64   `json:"id"`
+	Idx           int64   `json:"idx"`
+	StartS        float64 `json:"start_s"`
+	EndS          float64 `json:"end_s"`
+	TextCs        string  `json:"text_cs"`
+	TtsPath       string  `json:"tts_path"`
+	IsSong        int64   `json:"is_song"`
+	CharacterName string  `json:"character_name"`
+	RefPath       string  `json:"ref_path"`
+	Speed         float64 `json:"speed"`
+}
+
+func (q *Queries) ListSegmentsForTTS(ctx context.Context, episodeID int64) ([]ListSegmentsForTTSRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSegmentsForTTS, episodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSegmentsForTTSRow
+	for rows.Next() {
+		var i ListSegmentsForTTSRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Idx,
+			&i.StartS,
+			&i.EndS,
+			&i.TextCs,
+			&i.TtsPath,
+			&i.IsSong,
+			&i.CharacterName,
+			&i.RefPath,
+			&i.Speed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSegmentsWithCharacter = `-- name: ListSegmentsWithCharacter :many
 SELECT s.id, s.episode_id, s.idx, s.start_s, s.end_s, s.speaker, s.character_id, s.text_en, s.text_cs, s.tts_path, s.tts_duration, s.stretch, s.fit_iter, s.is_song, COALESCE(c.name, '') AS character_name
 FROM segments s LEFT JOIN characters c ON c.id = s.character_id
@@ -489,6 +544,27 @@ type SetSegmentCSParams struct {
 
 func (q *Queries) SetSegmentCS(ctx context.Context, arg SetSegmentCSParams) error {
 	_, err := q.db.ExecContext(ctx, setSegmentCS, arg.TextCs, arg.EpisodeID, arg.Idx)
+	return err
+}
+
+const setSegmentTTS = `-- name: SetSegmentTTS :exec
+UPDATE segments SET tts_path = ?, tts_duration = ? WHERE episode_id = ? AND idx = ?
+`
+
+type SetSegmentTTSParams struct {
+	TtsPath     string   `json:"tts_path"`
+	TtsDuration *float64 `json:"tts_duration"`
+	EpisodeID   int64    `json:"episode_id"`
+	Idx         int64    `json:"idx"`
+}
+
+func (q *Queries) SetSegmentTTS(ctx context.Context, arg SetSegmentTTSParams) error {
+	_, err := q.db.ExecContext(ctx, setSegmentTTS,
+		arg.TtsPath,
+		arg.TtsDuration,
+		arg.EpisodeID,
+		arg.Idx,
+	)
 	return err
 }
 

@@ -20,6 +20,7 @@ type Config struct {
 	DB      string  `yaml:"db"`
 	Workers Workers `yaml:"workers"`
 	LLM     LLM     `yaml:"llm"`
+	TTS     TTS     `yaml:"tts"`
 	FFmpeg  string  `yaml:"ffmpeg"`
 	FFprobe string  `yaml:"ffprobe"`
 }
@@ -27,7 +28,6 @@ type Config struct {
 type Workers struct {
 	Separate Worker `yaml:"separate"`
 	ASR      Worker `yaml:"asr"`
-	TTS      Worker `yaml:"tts"`
 }
 
 type Worker struct {
@@ -48,14 +48,29 @@ type LLM struct {
 	Timeout time.Duration `yaml:"timeout"`
 }
 
-// PortGateway of the AiStack LLM gateway on SPARK.
-const PortGateway = 8080
+// TTS is the AiStack audio service (XTTS-v2 behind /v1/audio/tts).
+type TTS struct {
+	URL      string        `yaml:"url"`
+	APIKey   string        `yaml:"-"` // only from DUB_TTS_KEY
+	Parallel int           `yaml:"parallel"`
+	Timeout  time.Duration `yaml:"timeout"`
+	// VoiceRights and VoiceSource are the declaration the service requires to
+	// store a cloned voice (own | consented | licensed | synthetic). There is
+	// deliberately no default: only the owner can make it.
+	VoiceRights string `yaml:"voice_rights"`
+	VoiceSource string `yaml:"voice_source"`
+}
+
+// Ports of AiStack services on SPARK.
+const (
+	PortGateway = 8080
+	PortAudio   = 8093
+)
 
 // Default worker ports on SPARK. 8102–8104 are taken by other services there.
 const (
 	PortSeparate = 8101
 	PortASR      = 8105
-	PortTTS      = 8106
 )
 
 func Default() Config {
@@ -66,9 +81,9 @@ func Default() Config {
 		Workers: Workers{
 			Separate: Worker{Storage: "shared", Timeout: 30 * time.Minute},
 			ASR:      Worker{Storage: "shared", Timeout: 30 * time.Minute},
-			TTS:      Worker{Storage: "shared", Timeout: 5 * time.Minute},
 		},
 		LLM:     LLM{Model: "openclaw-default", Timeout: 5 * time.Minute},
+		TTS:     TTS{Parallel: 2, Timeout: 5 * time.Minute},
 		FFmpeg:  "ffmpeg",
 		FFprobe: "ffprobe",
 	}
@@ -112,7 +127,6 @@ func Load(path string) (Config, error) {
 	}{
 		{&cfg.Workers.Separate, "SEPARATE", PortSeparate},
 		{&cfg.Workers.ASR, "ASR", PortASR},
-		{&cfg.Workers.TTS, "TTS", PortTTS},
 	} {
 		setFromEnv(&w.w.URL, "DUB_"+w.name+"_URL")
 		setFromEnv(&w.w.Storage, "DUB_"+w.name+"_STORAGE")
@@ -125,6 +139,13 @@ func Load(path string) (Config, error) {
 	setFromEnv(&cfg.LLM.APIKey, "DUB_LLM_KEY")
 	if cfg.LLM.URL == "" && host != "" {
 		cfg.LLM.URL = fmt.Sprintf("http://%s:%d/v1", host, PortGateway)
+	}
+	setFromEnv(&cfg.TTS.URL, "DUB_TTS_URL")
+	setFromEnv(&cfg.TTS.APIKey, "DUB_TTS_KEY")
+	setFromEnv(&cfg.TTS.VoiceRights, "DUB_TTS_VOICE_RIGHTS")
+	setFromEnv(&cfg.TTS.VoiceSource, "DUB_TTS_VOICE_SOURCE")
+	if cfg.TTS.URL == "" && host != "" {
+		cfg.TTS.URL = fmt.Sprintf("http://%s:%d", host, PortAudio)
 	}
 	return cfg, nil
 }

@@ -65,6 +65,8 @@ Soubory seriálu v `series/<serial>/`:
 Překlad jde přes LLM gateway AiStacku (`DUB_LLM_URL`, výchozí model `openclaw-default` = qwen36,
 služba brokeru `qwen36`). Odpověď záložního modelu se odmítne.
 
+Syntéza jde přes službu `audio` AiStacku (XTTS-v2, služba brokeru `tts`), viz [docs/tts.md](docs/tts.md).
+
 ## Worker lokálně (bez GPU)
 
 ```bash

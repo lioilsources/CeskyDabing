@@ -17,6 +17,7 @@ import (
 	"github.com/lioilsources/CeskyDabing/internal/store"
 	"github.com/lioilsources/CeskyDabing/internal/store/db"
 	"github.com/lioilsources/CeskyDabing/internal/translate"
+	"github.com/lioilsources/CeskyDabing/internal/tts"
 	"github.com/lioilsources/CeskyDabing/internal/workers/asr"
 	"github.com/lioilsources/CeskyDabing/internal/workers/separate"
 )
@@ -126,6 +127,14 @@ func (a *app) runner(st *store.Store, so stepOptions) (*pipeline.Runner, error) 
 		steps["translate"] = failing{fmt.Errorf("LLM nemá adresu: nastav SPARK_HOST v .env nebo DUB_LLM_URL")}
 	} else {
 		steps["translate"] = pipeline.Translate{Store: st, Root: a.cfg.Root, LLM: translate.NewHTTPLLM(l.URL, l.Model, l.APIKey, l.Timeout)}
+	}
+	if t := a.cfg.TTS; t.URL == "" {
+		steps["synthesize"] = failing{fmt.Errorf("TTS nemá adresu: nastav SPARK_HOST v .env nebo DUB_TTS_URL")}
+	} else {
+		steps["synthesize"] = pipeline.Synthesize{
+			Store: st, Root: a.cfg.Root, FF: ff, Parallel: t.Parallel, Log: a.log,
+			TTS: tts.NewAiStack(t.URL, t.APIKey, t.VoiceRights, t.VoiceSource, t.Timeout),
+		}
 	}
 	return &pipeline.Runner{Store: st, Log: a.log, Steps: steps}, nil
 }
