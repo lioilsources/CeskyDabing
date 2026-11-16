@@ -107,3 +107,6 @@ WHERE s.episode_id = ? ORDER BY s.idx;
 
 -- name: SetSegmentTTS :exec
 UPDATE segments SET tts_path = ?, tts_duration = ? WHERE episode_id = ? AND idx = ?;
+
+-- name: SetSegmentFit :exec
+UPDATE segments SET stretch = ?, fit_iter = ? WHERE episode_id = ? AND idx = ?;

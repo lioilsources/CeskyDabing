@@ -34,7 +34,7 @@ func (a *app) doctorCmd() *cobra.Command {
 
 			fs, err := checkRoot(a.cfg.Root)
 			check("úložiště "+a.cfg.Root, err, fs)
-			for _, bin := range []string{a.cfg.FFmpeg, a.cfg.FFprobe, "rubberband"} {
+			for _, bin := range []string{a.cfg.FFmpeg, a.cfg.FFprobe, a.cfg.Rubberband} {
 				p, err := exec.LookPath(bin)
 				check(bin, err, p)
 			}

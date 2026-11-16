@@ -23,6 +23,8 @@ type Config struct {
 	TTS     TTS     `yaml:"tts"`
 	FFmpeg  string  `yaml:"ffmpeg"`
 	FFprobe string  `yaml:"ffprobe"`
+	// Rubberband is the time-stretch CLI used by the fit step.
+	Rubberband string `yaml:"rubberband"`
 }
 
 type Workers struct {
@@ -86,6 +88,8 @@ func Default() Config {
 		TTS:     TTS{Parallel: 2, Timeout: 5 * time.Minute},
 		FFmpeg:  "ffmpeg",
 		FFprobe: "ffprobe",
+
+		Rubberband: "rubberband",
 	}
 }
 
