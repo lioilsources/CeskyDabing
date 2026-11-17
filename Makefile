@@ -32,4 +32,4 @@ install: build
 # Copy the repo to SPARK (images are built by a broker job, not here).
 deploy-spark:
 	rsync -az --delete --exclude .git --exclude bin --exclude run --exclude models --exclude scratch \
-		--exclude '__pycache__' ./ spark:deploy/CeskyDabing/
+		--exclude '__pycache__' --exclude .venv --exclude .env ./ spark:deploy/CeskyDabing/
