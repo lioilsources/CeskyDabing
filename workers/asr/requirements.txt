@@ -1,9 +1,18 @@
-# Worker asr. torch/torchaudio are pinned in constraints (only cu130 has sm_121 kernels).
-# Versions are verified by workers/smoke on SPARK; whisperx pulls faster-whisper
-# (CTranslate2) and pyannote.audio. CTranslate2 aarch64 wheels may be CPU-only,
+# Worker asr. torch/torchaudio/torchcodec are pinned in constraints (only cu130 has
+# sm_121 kernels). whisperx itself is installed with --no-deps in the Dockerfile:
+# every whisperx release pins torch~=2.8, and pip then falls back to whisperx 3.7.2 +
+# pyannote.audio 3.x, which breaks on torchaudio 2.10 (no torchaudio.AudioMetaData).
+# These are whisperx 3.8.6 runtime deps. CTranslate2 aarch64 wheels may be CPU-only,
 # the worker then runs Whisper on CPU (ASR_WHISPER_DEVICE=auto).
-whisperx>=3.4
-pyannote.audio>=3.3
+pyannote.audio>=4.0,<5
+ctranslate2>=4.5.0
+faster-whisper>=1.2.0
+nltk>=3.9.1
+numpy>=2.1.0
+omegaconf>=2.3.0
+pandas>=2.2.3
+huggingface-hub<1.0.0
+transformers>=4.48.0,<5
 librosa==0.11.0
 soundfile==0.13.1
 

@@ -51,7 +51,7 @@ def pyannote():
     from pyannote.audio import Pipeline  # noqa: F401
 
     if load:
-        Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=os.environ.get("HF_TOKEN"))
+        Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", token=os.environ.get("HF_TOKEN"))
 
 
 def xtts():

@@ -28,7 +28,7 @@ Porty 8102–8104 jsou na SPARKu obsazené jinými službami.
 ```
 
 `dabing-asr` bude stejný, jen se službou `asr` a portem 8105. Potřebuje `HF_TOKEN`
-v `.env` na SPARKu (podmínky pyannote 3.1 odsouhlasené na Hugging Face).
+v `.env` na SPARKu (podmínky `pyannote/speaker-diarization-3.1` a `pyannote/wespeaker-voxceleb-resnet34-LM` odsouhlasené na Hugging Face).
 
 K tomu v AiStacku:
 - projekt `dabing` se stropem priority (návrh 30),
@@ -40,10 +40,14 @@ K tomu v AiStacku:
 
 ```bash
 make deploy-spark     # rsync repa na SPARK
-sparkctl run dabing dabing-separate 20 \
-  "cd ~/deploy/CeskyDabing && docker compose -f deploy/compose.spark.yaml build separate" \
-  "dabing: build separate"
+sparkctl run dabing tts 20 \
+  "cd ~/deploy/CeskyDabing && docker compose -f deploy/compose.spark.yaml build separate asr" \
+  "dabing: build workers"
 ```
+
+Třetí argument `run` je priorita, ne minuty. Build nesmí chtít službu `dabing-separate`:
+broker by doplněk spouštěl před stavbou jeho image a úloha spadne („doplněk nenaběhl“).
+Proto služba `tts`, která běží v profilech `comfy` i `llm`.
 
 ## Smoke test modelů (M0)
 
