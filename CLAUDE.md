@@ -23,7 +23,7 @@ Worker lokálně bez GPU: `SEPARATE_BACKEND=passthrough` (viz README).
 - `workers/` — Python FastAPI workery (build context `workers/`), `common/` = sdílený kód, `smoke/` = test modelů na sm_121
 - `internal/workers/files/` — společné souborové API workerů v Go
 - `deploy/compose.spark.yaml` — workery na SPARKu (spouští je jen broker)
-- `Prompts/` — plány; aktuální je `01-PLAN-M0-dokonceni-M1.md`
+- `Prompts/` — plány; aktuální je `01-PLAN-M0-dokonceni-M1.md`, předání na MacBook `02-HANDOFF-MacBook.md`
 
 ## Invarianty
 - Logika jen v Go. Workery jsou stateless obaly modelů: cesty dovnitř, cesty ven.
