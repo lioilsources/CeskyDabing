@@ -1,4 +1,5 @@
-# No transitive dependency (whisperx, pyannote.audio) may replace torch:
-# only the cu130 aarch64 build has sm_121 kernels.
+# No transitive dependency (pyannote.audio, faster-whisper) may replace torch:
+# only the cu130 aarch64 build has sm_121 kernels. torchcodec 0.10 pairs with torch 2.10.
 torch==2.10.0+cu130
 torchaudio==2.10.0+cu130
+torchcodec==0.10.0+cu130

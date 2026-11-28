@@ -9,7 +9,8 @@ Environment (plus the ASR_* variables of dabing_worker):
   ASR_MODEL          Whisper model, default large-v3
   ASR_BATCH_SIZE     transcription batch size (16)
   ASR_WHISPER_DEVICE auto | cuda | cpu — CTranslate2 aarch64 wheels may be CPU-only
-  HF_TOKEN           Hugging Face token with the pyannote 3.1 terms accepted
+  ASR_DIARIZE_MODEL  pyannote pipeline, default pyannote/speaker-diarization-3.1
+  HF_TOKEN           Hugging Face token with the pyannote model terms accepted
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from dabing_worker import Worker, write_json
 BACKEND = os.environ.get("ASR_BACKEND", "whisperx")
 MODEL = os.environ.get("ASR_MODEL", "large-v3")
 BATCH_SIZE = int(os.environ.get("ASR_BATCH_SIZE", "16"))
+DIARIZE_MODEL = os.environ.get("ASR_DIARIZE_MODEL", "pyannote/speaker-diarization-3.1")
 SR = 16000  # WhisperX and pyannote both work at 16 kHz
 F0_MAX_S = 60.0  # seconds of speech per speaker used for F0 statistics
 
@@ -226,17 +228,15 @@ class WhisperX:
         return {"language": language, "segments": segments, "speakers": build_speakers(audio, segments, embeddings)}
 
     def _diarization_pipeline(self):
-        try:
-            from whisperx.diarize import DiarizationPipeline
-        except ImportError:
-            from whisperx import DiarizationPipeline
-        return DiarizationPipeline(use_auth_token=os.environ.get("HF_TOKEN"), device=self.device)
+        from whisperx.diarize import DiarizationPipeline
+
+        return DiarizationPipeline(model_name=DIARIZE_MODEL, token=os.environ.get("HF_TOKEN"), device=self.device)
 
     def _embed(self, audio: np.ndarray, segments: list[dict], speakers: set[str]) -> dict[str, np.ndarray]:
         from pyannote.audio import Inference, Model
 
         model = self._get("embedding", lambda: Model.from_pretrained(
-            "pyannote/wespeaker-voxceleb-resnet34-LM", use_auth_token=os.environ.get("HF_TOKEN")))
+            "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.environ.get("HF_TOKEN")))
         infer = Inference(model, window="whole", device=self.torch.device(self.device))
         out = {}
         for spk in speakers:

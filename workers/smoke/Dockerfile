@@ -26,12 +26,16 @@ COPY smoke.py /smoke.py
 # Installs may fail; the failure is logged and smoke.py reports it.
 SHELL ["/bin/bash", "-c"]
 
+# whisperx pins torch~=2.8 in every release, so it goes in with --no-deps on top of
+# pyannote.audio 4 (pyannote 3.x breaks on torchaudio 2.10), as in worker asr.
 FROM base AS whisperx
-RUN pip install --no-cache-dir -c /constraints.txt whisperx > /install.log 2>&1 \
+RUN (pip install --no-cache-dir -c /constraints.txt "torchcodec==0.10.0+cu130" "pyannote.audio>=4.0,<5" \
+        "ctranslate2>=4.5.0" "faster-whisper>=1.2.0" nltk omegaconf pandas "huggingface-hub<1.0.0" "transformers>=4.48.0,<5" \
+    && pip install --no-cache-dir --no-deps whisperx==3.8.6) > /install.log 2>&1 \
     || echo "FAIL pip install whisperx" >> /install.log
 
 FROM base AS pyannote
-RUN pip install --no-cache-dir -c /constraints.txt "pyannote.audio>=3.1" > /install.log 2>&1 \
+RUN pip install --no-cache-dir -c /constraints.txt "torchcodec==0.10.0+cu130" "pyannote.audio>=4.0,<5" > /install.log 2>&1 \
     || echo "FAIL pip install pyannote.audio" >> /install.log
 
 # MOSS-TTS pins torch 2.9.1+cu128 only in the [torch-runtime] extra (cu128 has

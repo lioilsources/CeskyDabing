@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl ca-certificates ffmpeg \
-        python3.12 python3.12-venv \
+        python3.12 python3.12-venv libpython3.12t64 \
         libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -38,8 +38,9 @@ COPY asr/requirements.txt asr/constraints.txt /tmp/
 RUN pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cu130 \
         -c /tmp/constraints.txt -r /tmp/requirements.txt \
+    && pip install --no-cache-dir --no-deps whisperx==3.8.6 \
     && python3 -c "import torch; assert torch.__version__.startswith('2.10'), torch.__version__" \
-    && python3 -c "import whisperx, pyannote.audio; print('asr OK')"
+    && python3 -c "import whisperx, whisperx.diarize, pyannote.audio, torchcodec; print('asr OK')"
 
 COPY common/dabing_worker.py /srv/
 COPY asr/app /srv/app
